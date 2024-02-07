@@ -6,30 +6,30 @@
     //"image": "localhost/rust_dev:latest",
     "image": "rust_dev",
     "customizations": {
-            "vscode": {
-                    "extensions": [
-                            "rust-lang.rust-analyzer",
-                            "serayuzgur.crates",
-                            "vadimcn.vscode-lldb",
-                            "formulahendry.code-runner",
-                            "chunsen.bracket-select",
-                            "tamasfe.even-better-toml",
-                            "waderyan.gitblame",
-                            "mhutchie.git-graph",
-                            "eamodio.gitlens",
-                            "oderwat.indent-rainbow"
-                    ]
-            }
+        "vscode": {
+            "extensions": [
+                "rust-lang.rust-analyzer",
+                "serayuzgur.crates",
+                "vadimcn.vscode-lldb",
+                "formulahendry.code-runner",
+                "chunsen.bracket-select",
+                "tamasfe.even-better-toml",
+                "waderyan.gitblame",
+                "mhutchie.git-graph",
+                "eamodio.gitlens",
+                "oderwat.indent-rainbow"
+            ]
+        }
     },
     "mounts": [
-            // rust
-            "source=/home/henry/.local/share/containers/storage/volumes/rust_dev/_data/usr/local/cargo,target=/usr/local/cargo,type=bind",
-            "source=/home/henry/.local/share/containers/storage/volumes/rust_dev/_data/usr/local/rustup,target=/usr/local/rustup,type=bind",
-            // ssh
-            "source=/home/henry/.ssh/,target=/root/.ssh,type=bind"
+        // rust
+        "source=/home/henry/.local/share/containers/storage/volumes/rust_dev/_data/usr/local/cargo,target=/usr/local/cargo,type=bind",
+        "source=/home/henry/.local/share/containers/storage/volumes/rust_dev/_data/usr/local/rustup,target=/usr/local/rustup,type=bind",
+        // ssh
+        "source=/home/henry/.ssh/,target=/root/.ssh,type=bind"
     ],
     "runArgs": [
-            "--network=host"
+        "--network=host"
     ],
     "remoteUser": "root"
 }
