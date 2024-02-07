@@ -1,9 +1,11 @@
 use clap::Parser;
+use core::panic;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     env,
     fs::{self, File},
+    hash::Hash,
     io::{BufReader, Read, Write},
     iter::Map,
     path::{Path, PathBuf},
@@ -15,8 +17,8 @@ use toml::{de, Value};
 Activate an environment
 "#)]
 struct Activate {
-    /// Name of the environment to activate
-    env_name: String,
+    /// Name of the environment to activate. If not provided, any active environment will be deactivated.
+    env_name: Option<String>,
 
     /// If provided, the command to unset the old env variables and load the new env will be sent to std out. This
     /// is useful if you want your current shell to take on the output e.g. `eval "$(activate dev -e)"`
@@ -45,30 +47,42 @@ fn main() {
 
     let args: Activate = Activate::parse();
     let selected_env = args.env_name;
-    let EnvironmentData { env, links } = toml
-        .0
-        .expect(&format!("No environments found in `{}`.", ACTIVATE_TOML))
-        .remove(&selected_env)
-        .expect(&format!("'{}' is not a valid environment", &selected_env));
 
     let activate_current_dir = Path::new(ACTIVATE_DIR);
     let state_dir = activate_current_dir.join(ACTIVATE_STATE_DIR);
     let env_file = state_dir.join(ENV_FILE);
     let links_file = state_dir.join(LINKS_FILE);
 
+    let new_env: Option<HashMap<String, String>>;
     let old_env_vars;
-    if state_dir.exists() {
-        old_env_vars = decativate_current(&env_file, &links_file);
-    } else {
-        old_env_vars = None;
-        fs::create_dir_all(&state_dir).expect(&format!(
-            "Could not create `{}` directory.",
-            state_dir.to_string_lossy()
-        ));
-        create_gitignore_file(&state_dir);
-    }
+    if let Some(selected_env) = &selected_env {
+        let EnvironmentData { env, links } = toml
+            .0
+            .expect(&format!("No environments found in `{}`.", ACTIVATE_TOML))
+            .remove(selected_env)
+            .expect(&format!("'{}' is not a valid environment", &selected_env));
 
-    activate_new(&env, &env_file, &links, &links_file);
+        if state_dir.exists() {
+            old_env_vars = decativate_current(&env_file, &links_file);
+        } else {
+            old_env_vars = None;
+            fs::create_dir_all(&state_dir).expect(&format!(
+                "Could not create `{}` directory.",
+                state_dir.to_string_lossy()
+            ));
+            create_gitignore_file(&state_dir);
+        }
+
+        activate_new(&env, &env_file, &links, &links_file);
+        new_env = env;
+    } else {
+        if state_dir.exists() {
+            old_env_vars = decativate_current(&env_file, &links_file);
+        } else {
+            old_env_vars = None;
+        }
+        new_env = None;
+    }
 
     if args.eval {
         let mut output = String::new();
@@ -79,7 +93,7 @@ fn main() {
                 }
             }
         }
-        if let Some(env) = env {
+        if let Some(env) = new_env {
             for (key, value) in env {
                 output.push_str(&format!("export {}={}\n", key, value));
             }
@@ -243,10 +257,14 @@ fn remove_links(current_links_file: &Path) {
         for (_key, value) in links {
             let target = Path::new(&value);
             if target.exists() {
-                fs::remove_file(&target).expect(&format!(
-                    "Could not remove link `{}`. The link is still active.",
-                    target.to_string_lossy()
-                ));
+                if target.is_symlink() {
+                    fs::remove_file(&target).expect(&format!(
+                        "Could not remove link `{}`.",
+                        target.to_string_lossy()
+                    ));
+                } else {
+                    panic!("The existing link `{}` is not a symlink. Therefore it will not be removed.", target.to_string_lossy());
+                }
             }
         }
     }
