@@ -1,15 +1,26 @@
-use std::{env, error::Error, fs, path::Path};
+use std::{collections::HashMap, env, fs, path::Path, sync::Once};
 
-use assert_cmd::{assert::OutputAssertExt, cargo::CargoError};
+use assert_cmd::cargo::CargoError;
 use predicates::prelude::predicate;
+
+static INIT: Once = Once::new();
+
+pub fn initialize() {
+    INIT.call_once(|| {
+        let test_dir = Path::new("tests");
+        assert!(
+            env::set_current_dir(&test_dir).is_ok(),
+            "Failed to change directory"
+        );
+    });
+    // deactivate
+    let assert = assert_cmd::Command::cargo_bin("activate").unwrap().assert();
+    assert.success().stdout(predicate::str::contains(""));
+}
 
 #[test]
 fn links_switching_between() -> Result<(), CargoError> {
-    let test_dir = Path::new("tests");
-    assert!(
-        env::set_current_dir(&test_dir).is_ok(),
-        "Failed to change directory"
-    );
+    initialize();
 
     let assert = assert_cmd::Command::cargo_bin("activate")?
         .arg("test")
@@ -75,60 +86,45 @@ fn links_switching_between() -> Result<(), CargoError> {
 
 #[test]
 fn env_switching_between() -> Result<(), CargoError> {
-    let test_dir = Path::new("tests");
-    assert!(
-        env::set_current_dir(&test_dir).is_ok(),
-        "Failed to change directory"
-    );
-
-    // deactivate
-    let assert = assert_cmd::Command::cargo_bin("activate")?.assert();
-    assert.success().stdout(predicate::str::contains(""));
+    initialize();
 
     let assert = assert_cmd::Command::cargo_bin("activate")?
         .arg("test")
         .assert();
     assert.success().stdout(predicate::str::contains(""));
-    assert_eq!(env::var("PYTHONPATH").unwrap(), "src");
-    assert_eq!(env::var("DJANGO_SETTINGS_MODULE").unwrap(), "settings");
-    assert!(env::var("XDG_CONFIG_HOME").is_err());
-    assert!(env::var("XDG_DATA_HOME").is_err());
-    assert!(env::var("XDG_CACHE_HOME").is_err());
+    let env_file = Path::new(".activate/state/env.json");
+    assert!(env_file.exists());
+    let env: HashMap<String,String> = serde_json::from_str(&fs::read_to_string(env_file).unwrap()).unwrap();
+    assert_eq!(env.get("PYTHONPATH").unwrap(), "src");
+    assert_eq!(env.get("DJANGO_SETTINGS_MODULE").unwrap(), "settings");
+    assert!(env.get("XDG_CONFIG_HOME").is_none());
+    assert!(env.get("XDG_DATA_HOME").is_none());
+    assert!(env.get("XDG_CACHE_HOME").is_none());
 
     let assert = assert_cmd::Command::cargo_bin("activate")?
         .arg("dev")
         .assert();
     assert.success().stdout(predicate::str::contains(""));
-    assert!(env::var("PYTHONPATH").is_err());
-    assert!(env::var("DJANGO_SETTINGS_MODULE").is_err());
-    assert_eq!(env::var("XDG_CONFIG_HOME").unwrap(), "config");
-    assert_eq!(env::var("XDG_DATA_HOME").unwrap(), "data");
-    assert_eq!(env::var("XDG_CACHE_HOME").unwrap(), "cache");
+    assert!(env_file.exists());
+    let env: HashMap<String,String> = serde_json::from_str(&fs::read_to_string(env_file).unwrap()).unwrap();
+    assert!(env.get("PYTHONPATH").is_none());
+    assert!(env.get("DJANGO_SETTINGS_MODULE").is_none());
+    assert_eq!(env.get("XDG_CONFIG_HOME").unwrap(), "config");
+    assert_eq!(env.get("XDG_DATA_HOME").unwrap(), "data");
+    assert_eq!(env.get("XDG_CACHE_HOME").unwrap(), "cache");
 
     let assert = assert_cmd::Command::cargo_bin("activate")?
         .arg("prod")
         .assert();
     assert.success().stdout(predicate::str::contains(""));
-    assert!(env::var("PYTHONPATH").is_err());
-    assert!(env::var("DJANGO_SETTINGS_MODULE").is_err());
-    assert!(env::var("XDG_CONFIG_HOME").is_err());
-    assert!(env::var("XDG_DATA_HOME").is_err());
-    assert!(env::var("XDG_CACHE_HOME").is_err());
-
-    // deactivate
-    let assert = assert_cmd::Command::cargo_bin("activate")?.assert();
-    assert.success().stdout(predicate::str::contains(""));
+    assert!(!env_file.exists());
 
     Ok(())
 }
 
 #[test]
 fn env_eval() -> Result<(), CargoError> {
-    let test_dir = Path::new("tests");
-    assert!(
-        env::set_current_dir(&test_dir).is_ok(),
-        "Failed to change directory"
-    );
+    initialize();
 
     // deactivate
     let assert = assert_cmd::Command::cargo_bin("activate")?.assert();
@@ -168,7 +164,6 @@ unset XDG_DATA_HOME
 "#,
     ));
 
-
     let assert = assert_cmd::Command::cargo_bin("activate")?
         .arg("dev")
         .arg("-e")
@@ -181,7 +176,9 @@ export XDG_DATA_HOME=data
     ));
 
     // deactivate
-    let assert = assert_cmd::Command::cargo_bin("activate")?.arg("-e").assert();
+    let assert = assert_cmd::Command::cargo_bin("activate")?
+        .arg("-e")
+        .assert();
     assert.success().stdout(predicate::eq(
         r#"unset XDG_CACHE_HOME
 unset XDG_CONFIG_HOME
