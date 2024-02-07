@@ -2,6 +2,9 @@
 PYTHONPATH = "src"
 DJANGO_SETTINGS_MODULE = "settings"
 
+[test.links]
+".activate/test_file" = "src/test_file"
+
 [dev.env]
 XDG_CONFIG_HOME = "config"
 XDG_DATA_HOME = "data"
