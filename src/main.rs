@@ -3,14 +3,10 @@ use core::panic;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    env,
     fs::{self, File},
-    hash::Hash,
-    io::{BufReader, Read, Write},
-    iter::Map,
+    io::Write,
     path::{Path, PathBuf},
 };
-use toml::{de, Value};
 
 #[derive(Parser, Debug)]
 #[clap(about = r#"
@@ -21,7 +17,7 @@ struct Activate {
     env_name: Option<String>,
 
     /// If provided, the command to unset the old env variables and load the new env will be sent to std out. This
-    /// is useful if you want your current shell to take on the output e.g. `eval "$(activate dev -e)"`
+    /// is useful if you want your current shell to take on the output e.g. `eval "$(activate dev -e)"`. (Linux only)
     #[arg(short, default_value = "false")]
     eval: bool,
 }
@@ -42,7 +38,7 @@ fn main() {
     }
     let contents = fs::read_to_string(&activate_file)
         .expect(&format!("Could not read `{}` file.", ACTIVATE_TOML));
-    let mut toml: Environments =
+    let toml: Environments =
         toml::from_str(&contents).expect(&format!("Could not parse `{}`.", ACTIVATE_TOML));
 
     let args: Activate = Activate::parse();
@@ -226,24 +222,26 @@ fn add_links(links: &HashMap<String, String>, current_links_file: &Path) {
         links_file
             .write_all(&format!("\"{}\"=\"{}\"\n", key, value).as_bytes())
             .expect(&format!("Could not write to `{}` file.", LINKS_FILE));
-        let metadata =
-            fs::symlink_metadata(&key).expect(&format!("Could not get metadata for `{}`.", &key));
         let depth = target
             .components()
             .skip(1)
             .fold(PathBuf::new(), |p, _| p.join(".."));
         let link_path = depth.join(source);
         #[cfg(windows)]
-        if metadata.is_dir() {
-            std::os::windows::fs::symlink_any(link_path, target).expect(&format!(
-                "Could not create link from `{}` to `{}`.",
-                &key, &value
-            ));
-        } else {
-            std::os::windows::fs::symlink_file(link_path, target).expect(&format!(
-                "Could not create link from `{}` to `{}`.",
-                &key, &value
-            ));
+        {
+            let metadata = fs::symlink_metadata(&key)
+                .expect(&format!("Could not get metadata for `{}`.", &key));
+            if metadata.is_dir() {
+                std::os::windows::fs::symlink_any(link_path, target).expect(&format!(
+                    "Could not create link from `{}` to `{}`.",
+                    &key, &value
+                ));
+            } else {
+                std::os::windows::fs::symlink_file(link_path, target).expect(&format!(
+                    "Could not create link from `{}` to `{}`.",
+                    &key, &value
+                ));
+            }
         }
         #[cfg(unix)]
         std::os::unix::fs::symlink(link_path, target).expect(&format!(
