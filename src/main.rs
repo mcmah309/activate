@@ -227,14 +227,13 @@ fn add_links(links: &HashMap<String, String>, current_links_file: &Path) {
             .skip(1)
             .fold(PathBuf::new(), |p, _| p.join(".."));
         let link_path = depth.join(source);
+        #[cfg(windows)]
         if metadata.is_dir() {
-            #[cfg(windows)]
             std::os::windows::fs::symlink_any(link_path, target).expect(&format!(
                 "Could not create link from `{}` to `{}`.",
                 &key, &value
             ));
         } else {
-            #[cfg(windows)]
             std::os::windows::fs::symlink_file(link_path, target).expect(&format!(
                 "Could not create link from `{}` to `{}`.",
                 &key, &value
