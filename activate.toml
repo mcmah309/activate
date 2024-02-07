@@ -1,0 +1,8 @@
+[test.env]
+PYTHONPATH = "src"
+DJANGO_SETTINGS_MODULE = "settings"
+
+[dev.env]
+XDG_CONFIG_HOME = "config"
+XDG_DATA_HOME = "data"
+XDG_CACHE_HOME = "cache"
