@@ -88,14 +88,20 @@ fn main() {
         let mut output = String::new();
         if let Some(old_env) = old_env_vars {
             if let Some(old_env_vars) = old_env.0 {
-                for (key, _) in old_env_vars {
+                let mut keys: Vec<String> = old_env_vars.into_keys().collect();
+                keys.sort();
+                for key in keys {
                     output.push_str(&format!("unset {}\n", key));
                 }
             }
         }
         if let Some(env) = new_env {
-            for (key, value) in env {
-                output.push_str(&format!("export {}={}\n", key, value));
+            let mut keys: Vec<&str> = env.keys().map(|k| k.as_str()).collect();
+            keys.sort();
+            for key in keys {
+                if let Some(value) = env.get(key) {
+                    output.push_str(&format!("export {}={}\n", key, value));
+                }
             }
         }
         print!("{}", output);
