@@ -36,14 +36,6 @@ const LINKS_FILE: &'static str = "links.toml";
 fn main() {
     let args: Activate = Activate::parse();
 
-    let activate_file = Path::new(ACTIVATE_TOML);
-    if !activate_file.exists() {
-        panic!(
-            "No `{}` file found in the current directory.",
-            ACTIVATE_TOML
-        );
-    }
-
     let is_recursive = args.recursive;
     let selected_env = args.env_name;
     let eval = args.eval;
@@ -77,10 +69,18 @@ fn main() {
                 })
             });
 
+        drop(tx);
         for r in rx {
             output.push(r);
         }
     } else {
+        let activate_file = Path::new(ACTIVATE_TOML);
+        if !activate_file.exists() {
+            panic!(
+                "No `{}` file found in the current directory.",
+                ACTIVATE_TOML
+            );
+        }
         activate(&activate_file, selected_env, eval).map(|o| output.push(o));
     }
 
@@ -90,14 +90,16 @@ fn main() {
     }
 }
 
+/// Sources parameters and activates the environment. Returns a string to set the environment variables if `eval` is true.
 fn activate(activate_file: &Path, selected_env: Option<String>, eval: bool) -> Option<String> {
     let contents = fs::read_to_string(&activate_file)
         .expect(&format!("Could not read `{}` file.", ACTIVATE_TOML));
     let toml: Environments =
         toml::from_str(&contents).expect(&format!("Could not parse `{}`.", ACTIVATE_TOML));
 
-    let activate_current_dir = Path::new(ACTIVATE_DIR);
-    let state_dir = activate_current_dir.join(ACTIVATE_STATE_DIR);
+    let current_dir = activate_file.parent().unwrap();
+    let activate_dir = current_dir.join(ACTIVATE_DIR);
+    let state_dir = activate_dir.join(ACTIVATE_STATE_DIR);
     let env_file = state_dir.join(ENV_FILE);
     let links_file = state_dir.join(LINKS_FILE);
 
@@ -111,7 +113,7 @@ fn activate(activate_file: &Path, selected_env: Option<String>, eval: bool) -> O
             .expect(&format!("'{}' is not a valid environment", &selected_env));
 
         if state_dir.exists() {
-            old_env_vars = decativate_current(&env_file, &links_file);
+            old_env_vars = decativate_current(&env_file, &links_file, &current_dir);
         } else {
             old_env_vars = None;
             fs::create_dir_all(&state_dir).expect(&format!(
@@ -121,11 +123,11 @@ fn activate(activate_file: &Path, selected_env: Option<String>, eval: bool) -> O
             create_gitignore_file(&state_dir);
         }
 
-        activate_new(&env, &env_file, &links, &links_file);
+        activate_new(&env, &env_file, &links, &links_file, &current_dir);
         new_env = env;
     } else {
         if state_dir.exists() {
-            old_env_vars = decativate_current(&env_file, &links_file);
+            old_env_vars = decativate_current(&env_file, &links_file, &current_dir);
         } else {
             old_env_vars = None;
         }
@@ -175,6 +177,7 @@ struct ActiveEnvironmentLinks(Option<HashMap<String, String>>);
 fn decativate_current(
     current_env_file: &Path,
     current_links_file: &Path,
+    current_dir: &Path,
 ) -> Option<ActiveEnvironmentEnv> {
     let old_env_vars;
     if current_env_file.exists() {
@@ -183,23 +186,25 @@ fn decativate_current(
         old_env_vars = None;
     }
     if current_links_file.exists() {
-        remove_links(current_links_file);
+        remove_links(current_links_file, current_dir);
     }
 
     old_env_vars
 }
 
+/// Activates the new environment.
 fn activate_new(
     env: &Option<HashMap<String, String>>,
     env_file: &Path,
     links: &Option<HashMap<String, String>>,
     links_file: &Path,
+    current_dir: &Path,
 ) {
     if let Some(env) = env {
         add_env(env, env_file);
     }
     if let Some(links) = links {
-        add_links(links, links_file);
+        add_links(links, links_file, current_dir);
     }
 }
 
@@ -251,7 +256,11 @@ fn create_gitignore_file(state_dir: &Path) {
 
 //************************************************************************//
 
-fn add_links(links: &HashMap<String, String>, current_links_file: &Path) {
+fn add_links(
+    links: &HashMap<String, String>,
+    current_links_file: &Path,
+    current_dir: &Path,
+) {
     let mut links_file = File::options()
         .create(true)
         .append(true)
@@ -259,59 +268,77 @@ fn add_links(links: &HashMap<String, String>, current_links_file: &Path) {
         .expect(&format!("Could not open `{}` file.", LINKS_FILE));
     for (key, value) in links {
         let source = Path::new(&key);
-        if !source.exists() {
-            panic!("The link `{}` does not exist.", source.to_string_lossy());
-        }
         if source.starts_with("./") || source.starts_with("../") {
             panic!("The source `{}` should not start with `./` or `../`. The source is relative to the `.activate` directory.", source.to_string_lossy());
         }
-        let target = Path::new(&value);
-        if target.exists() {
-            panic!("The link `{}` already exists.", target.to_string_lossy());
+        let mut source = current_dir.join(source);
+        if source.starts_with("./") {
+            source = source.strip_prefix("./").unwrap().to_path_buf();
         }
+        if !source.exists() {
+            panic!("The source `{}` does not exist.", source.to_string_lossy());
+        }
+        let target = Path::new(&value);
         if target.starts_with("./") || target.starts_with("../") {
             panic!("The target `{}` should not start with `./` or `../`. The target is relative to the `.activate` directory.", target.to_string_lossy());
         }
+        let mut target = current_dir.join(target);
+        if target.starts_with("./") {
+            target = target.strip_prefix("./").unwrap().to_path_buf();
+        }
+        if target.exists() {
+            panic!("The link `{}` already exists.", target.to_string_lossy());
+        }
         links_file
             .write_all(&format!("\"{}\"=\"{}\"\n", key, value).as_bytes())
-            .expect(&format!("Could not write to `{}` file.", LINKS_FILE));
-        let depth = target
+            .expect(&format!(
+                "Could not write to `{}` file. In directory `{}`.",
+                LINKS_FILE,
+                current_dir.to_string_lossy()
+            ));
+        let depth_adjustment = target
             .components()
             .skip(1)
             .fold(PathBuf::new(), |p, _| p.join(".."));
-        let link_path = depth.join(source);
+        let link_path = depth_adjustment.join(key);
         #[cfg(windows)]
         {
             let metadata = fs::symlink_metadata(&key)
                 .expect(&format!("Could not get metadata for `{}`.", &key));
             if metadata.is_dir() {
                 std::os::windows::fs::symlink_any(link_path, target).expect(&format!(
-                    "Could not create link from `{}` to `{}`.",
-                    &key, &value
+                    "Could not create link from `{}` to `{}`, in directory `{}`.",
+                    &key,
+                    &value,
+                    current_active_dir.to_string_lossy()
                 ));
             } else {
                 std::os::windows::fs::symlink_file(link_path, target).expect(&format!(
-                    "Could not create link from `{}` to `{}`.",
-                    &key, &value
+                    "Could not create link from `{}` to `{}`, in directory `{}`.",
+                    &key,
+                    &value,
+                    current_active_dir.to_string_lossy()
                 ));
             }
         }
         #[cfg(unix)]
         std::os::unix::fs::symlink(link_path, target).expect(&format!(
-            "Could not create link from `{}` to `{}`.",
-            &key, &value
+            "Could not create link from `{}` to `{}`, in directory `{}`.",
+            &key,
+            &value,
+            current_dir.to_string_lossy()
         ));
     }
 }
 
-fn remove_links(current_links_file: &Path) {
+fn remove_links(current_links_file: &Path, current_dir: &Path) {
     let links_string = fs::read_to_string(&current_links_file)
         .expect(&format!("Could not read `{}` file.", LINKS_FILE));
     let links = toml::from_str::<ActiveEnvironmentLinks>(&links_string)
         .expect(&format!("Could not parse `{}` file.", LINKS_FILE));
     if let Some(links) = links.0 {
         for (_key, value) in links {
-            let target = Path::new(&value);
+            let target = current_dir.join(&value);
             if target.exists() {
                 if target.is_symlink() {
                     fs::remove_file(&target).expect(&format!(
