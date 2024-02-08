@@ -14,7 +14,10 @@ pub fn initialize() {
         );
     });
     // deactivate
-    let assert = assert_cmd::Command::cargo_bin("activate").unwrap().arg("-r").assert();
+    let assert = assert_cmd::Command::cargo_bin("activate")
+        .unwrap()
+        .arg("-r")
+        .assert();
     assert.success().stdout(predicate::str::contains(""));
 }
 
@@ -223,6 +226,36 @@ export TEST_ENV2=test2
         fs::read_to_string(Path::new("another_active_dir/test_file4")).unwrap(),
         "test_file4"
     );
+
+    Ok(())
+}
+
+#[test]
+fn dot_env_file() -> Result<(), CargoError> {
+    initialize();
+
+    let assert = assert_cmd::Command::cargo_bin("activate")?
+        .arg("test")
+        .assert();
+    assert.success().stdout(predicate::eq(""));
+
+    dotenv::from_path(Path::new(".activate/.env")).unwrap();
+
+    assert_eq!(env::var("DJANGO_SETTINGS_MODULE").unwrap(), "settings");
+    assert_eq!(env::var("PYTHONPATH").unwrap(), "src");
+
+    let assert = assert_cmd::Command::cargo_bin("activate")?
+        .arg("test")
+        .arg("-r")
+        .assert();
+    assert.success().stdout(predicate::eq(""));
+
+    dotenv::from_path(Path::new(".activate/.env")).unwrap();
+
+    assert_eq!(env::var("DJANGO_SETTINGS_MODULE").unwrap(), "settings");
+    assert_eq!(env::var("PYTHONPATH").unwrap(), "src");
+    assert_eq!(env::var("TEST_ENV").unwrap(), "test");
+    assert_eq!(env::var("TEST_ENV2").unwrap(), "test2");
 
     Ok(())
 }
