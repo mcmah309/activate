@@ -159,7 +159,7 @@ fn activate(activate_file: &Path, selected_env: Option<String>) -> NewAndOldEnv 
                 "Could not create `{}` directory.",
                 state_dir.to_string_lossy()
             ));
-            create_gitignore_file(&state_dir);
+            create_gitignore_file(&activate_dir);
         }
 
         activate_new(&env, &env_file, &links, &links_file, &current_dir);
@@ -270,8 +270,8 @@ fn remove_env(current_env_file: &Path) -> ActiveEnvironmentEnv {
 
 //************************************************************************//
 
-fn create_gitignore_file(state_dir: &Path) {
-    fs::write(&state_dir.join(".gitignore"), "*").expect("Could not create `.gitignore` file.");
+fn create_gitignore_file(activate_dir: &Path) {
+    fs::write(&activate_dir.join(".gitignore"), "state/\n.env").expect("Could not create `.gitignore` file.");
 }
 
 //************************************************************************//
