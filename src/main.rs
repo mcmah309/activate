@@ -287,6 +287,9 @@ fn add_links(
             target = target.strip_prefix("./").unwrap().to_path_buf();
         }
         if target.exists() {
+            panic!("The target `{}` already exists.", target.to_string_lossy());
+        }
+        if target.is_symlink() {
             panic!("The link `{}` already exists.", target.to_string_lossy());
         }
         links_file
@@ -296,7 +299,7 @@ fn add_links(
                 LINKS_FILE,
                 current_dir.to_string_lossy()
             ));
-        let depth_adjustment = target
+        let depth_adjustment = PathBuf::from(value)
             .components()
             .skip(1)
             .fold(PathBuf::new(), |p, _| p.join(".."));
