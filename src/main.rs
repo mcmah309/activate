@@ -42,7 +42,7 @@ fn main() {
 
     let mut output = Vec::<String>::new();
     if is_recursive {
-        let (tx, rx) = crossbeam_channel::unbounded::<String>();
+        let (tx, rx) = crossbeam_channel::unbounded::<Vec<String>>();
 
         ignore::WalkBuilder::new(".")
             .hidden(true)
@@ -70,8 +70,8 @@ fn main() {
             });
 
         drop(tx);
-        for r in rx {
-            output.push(r);
+        for mut r in rx {
+            output.append(&mut r);
         }
     } else {
         let activate_file = Path::new(ACTIVATE_TOML);
@@ -81,7 +81,7 @@ fn main() {
                 ACTIVATE_TOML
             );
         }
-        activate(&activate_file, selected_env, eval).map(|o| output.push(o));
+        activate(&activate_file, selected_env, eval).map(|mut o| output.append(&mut o));
     }
 
     let output = output.join("\n");
@@ -90,8 +90,8 @@ fn main() {
     }
 }
 
-/// Sources parameters and activates the environment. Returns a string to set the environment variables if `eval` is true.
-fn activate(activate_file: &Path, selected_env: Option<String>, eval: bool) -> Option<String> {
+/// Sources parameters and activates the environment. Returns a strings to set the environment variables if `eval` is true.
+fn activate(activate_file: &Path, selected_env: Option<String>, eval: bool) -> Option<Vec<String>> {
     let contents = fs::read_to_string(&activate_file)
         .expect(&format!("Could not read `{}` file.", ACTIVATE_TOML));
     let toml: Environments =
@@ -135,13 +135,13 @@ fn activate(activate_file: &Path, selected_env: Option<String>, eval: bool) -> O
     }
 
     if eval {
-        let mut output = String::new();
+        let mut output: Vec<String> = Vec::new();
         if let Some(old_env) = old_env_vars {
             if let Some(old_env_vars) = old_env.0 {
                 let mut keys: Vec<String> = old_env_vars.into_keys().collect();
                 keys.sort();
                 for key in keys {
-                    output.push_str(&format!("unset {}\n", key));
+                    output.push(format!("unset {}", key));
                 }
             }
         }
@@ -150,7 +150,7 @@ fn activate(activate_file: &Path, selected_env: Option<String>, eval: bool) -> O
             keys.sort();
             for key in keys {
                 if let Some(value) = env.get(key) {
-                    output.push_str(&format!("export {}={}\n", key, value));
+                    output.push(format!("export {}={}", key, value));
                 }
             }
         }
