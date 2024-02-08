@@ -20,6 +20,11 @@ struct Activate {
     /// is useful if you want your current shell to take on the output e.g. `eval "$(activate dev -e)"`. (Linux only)
     #[arg(short, default_value = "false")]
     eval: bool,
+
+    /// If provided, will recursively activate the environment in the current directory and all subdirectories. Ignores files
+    /// specified in `.gitignore` and hidden files.
+    #[arg(short, default_value = "false")]
+    recursive: bool,
 }
 
 const ACTIVATE_TOML: &'static str = "activate.toml";
@@ -29,6 +34,8 @@ const ENV_FILE: &'static str = "env.json";
 const LINKS_FILE: &'static str = "links.toml";
 
 fn main() {
+    let args: Activate = Activate::parse();
+
     let activate_file = Path::new(ACTIVATE_TOML);
     if !activate_file.exists() {
         panic!(
@@ -36,13 +43,58 @@ fn main() {
             ACTIVATE_TOML
         );
     }
+
+    let is_recursive = args.recursive;
+    let selected_env = args.env_name;
+    let eval = args.eval;
+
+    let mut output = Vec::<String>::new();
+    if is_recursive {
+        let (tx, rx) = crossbeam_channel::unbounded::<String>();
+
+        ignore::WalkBuilder::new(".")
+            .hidden(true)
+            .git_ignore(true)
+            .git_global(false)
+            .git_exclude(false)
+            .parents(true)
+            .threads(num_cpus::get())
+            .build_parallel()
+            .run(|| {
+                let tx = tx.clone();
+                let selected_env = selected_env.clone();
+                Box::new(move |result| {
+                    let entry = result.expect("Could not get entry.");
+                    let path = entry.path();
+                    if path.is_dir() {
+                        let activate_file = path.join(ACTIVATE_TOML);
+                        if activate_file.exists() {
+                            activate(&activate_file, selected_env.clone(), eval)
+                                .map(|o| tx.send(o).expect("Could not send output."));
+                        }
+                    }
+                    ignore::WalkState::Continue
+                })
+            });
+
+        for r in rx {
+            output.push(r);
+        }
+    } else {
+        activate(&activate_file, selected_env, eval).map(|o| output.push(o));
+    }
+
+    let output = output.join("\n");
+    if !output.is_empty() {
+        println!("{}", output);
+    }
+}
+
+fn activate(activate_file: &Path, selected_env: Option<String>, eval: bool) -> Option<String> {
     let contents = fs::read_to_string(&activate_file)
         .expect(&format!("Could not read `{}` file.", ACTIVATE_TOML));
     let toml: Environments =
         toml::from_str(&contents).expect(&format!("Could not parse `{}`.", ACTIVATE_TOML));
-
-    let args: Activate = Activate::parse();
-    let selected_env = args.env_name;
 
     let activate_current_dir = Path::new(ACTIVATE_DIR);
     let state_dir = activate_current_dir.join(ACTIVATE_STATE_DIR);
@@ -80,7 +132,7 @@ fn main() {
         new_env = None;
     }
 
-    if args.eval {
+    if eval {
         let mut output = String::new();
         if let Some(old_env) = old_env_vars {
             if let Some(old_env_vars) = old_env.0 {
@@ -100,8 +152,9 @@ fn main() {
                 }
             }
         }
-        print!("{}", output);
+        return Some(output);
     }
+    return None;
 }
 
 #[derive(Debug, Deserialize)]
