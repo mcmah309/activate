@@ -19,8 +19,8 @@
                     "kind": "bin"
                 }
             },
-            "args": ["test"],
-            "cwd": "${workspaceFolder}"
+            "args": ["test", "-r"], // change as needed
+            "cwd": "${workspaceFolder}/tests"
         },
         {
             "type": "lldb",
