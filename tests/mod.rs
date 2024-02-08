@@ -14,7 +14,7 @@ pub fn initialize() {
         );
     });
     // deactivate
-    let assert = assert_cmd::Command::cargo_bin("activate").unwrap().assert();
+    let assert = assert_cmd::Command::cargo_bin("activate").unwrap().arg("-r").assert();
     assert.success().stdout(predicate::str::contains(""));
 }
 
@@ -94,7 +94,8 @@ fn env_switching_between() -> Result<(), CargoError> {
     assert.success().stdout(predicate::str::contains(""));
     let env_file = Path::new(".activate/state/env.json");
     assert!(env_file.exists());
-    let env: HashMap<String,String> = serde_json::from_str(&fs::read_to_string(env_file).unwrap()).unwrap();
+    let env: HashMap<String, String> =
+        serde_json::from_str(&fs::read_to_string(env_file).unwrap()).unwrap();
     assert_eq!(env.get("PYTHONPATH").unwrap(), "src");
     assert_eq!(env.get("DJANGO_SETTINGS_MODULE").unwrap(), "settings");
     assert!(env.get("XDG_CONFIG_HOME").is_none());
@@ -106,7 +107,8 @@ fn env_switching_between() -> Result<(), CargoError> {
         .assert();
     assert.success().stdout(predicate::str::contains(""));
     assert!(env_file.exists());
-    let env: HashMap<String,String> = serde_json::from_str(&fs::read_to_string(env_file).unwrap()).unwrap();
+    let env: HashMap<String, String> =
+        serde_json::from_str(&fs::read_to_string(env_file).unwrap()).unwrap();
     assert!(env.get("PYTHONPATH").is_none());
     assert!(env.get("DJANGO_SETTINGS_MODULE").is_none());
     assert_eq!(env.get("XDG_CONFIG_HOME").unwrap(), "config");
@@ -125,10 +127,6 @@ fn env_switching_between() -> Result<(), CargoError> {
 #[test]
 fn env_eval() -> Result<(), CargoError> {
     initialize();
-
-    // deactivate
-    let assert = assert_cmd::Command::cargo_bin("activate")?.assert();
-    assert.success().stdout(predicate::str::contains(""));
 
     let assert = assert_cmd::Command::cargo_bin("activate")?
         .arg("test")
@@ -185,6 +183,46 @@ unset XDG_CONFIG_HOME
 unset XDG_DATA_HOME
 "#,
     ));
+
+    Ok(())
+}
+
+#[test]
+fn recursive() -> Result<(), CargoError> {
+    initialize();
+
+    let assert = assert_cmd::Command::cargo_bin("activate")?
+        .arg("test")
+        .arg("-e")
+        .arg("-r")
+        .assert();
+    assert.success().stdout(predicate::eq(
+        r#"export DJANGO_SETTINGS_MODULE=settings
+export PYTHONPATH=src
+export TEST_ENV=test
+export TEST_ENV2=test2
+"#,
+    ));
+
+    assert_eq!(
+        fs::read_to_string(Path::new("another/test_file1")).unwrap(),
+        "test_file1"
+    );
+    assert_eq!(
+        fs::read_to_string(Path::new("test_file2_new_name")).unwrap(),
+        "test_file2"
+    );
+    assert_eq!(
+        fs::read_to_string(Path::new("test_file3")).unwrap(),
+        "test_file3"
+    );
+    assert!(!Path::new("dev_file1").exists());
+    assert!(!Path::new("prod_dir").exists());
+
+    assert_eq!(
+        fs::read_to_string(Path::new("another_active_dir/test_file4")).unwrap(),
+        "test_file4"
+    );
 
     Ok(())
 }
