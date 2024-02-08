@@ -1,8 +1,9 @@
 use clap::Parser;
 use core::panic;
-use serde::{Deserialize, Serialize};
+use serde::{de::value, Deserialize, Serialize};
 use std::{
     collections::HashMap,
+    f32::consts::E,
     fs::{self, File},
     io::Write,
     path::{Path, PathBuf},
@@ -31,6 +32,7 @@ const ACTIVATE_TOML: &'static str = "activate.toml";
 const ACTIVATE_DIR: &'static str = ".activate";
 const ACTIVATE_STATE_DIR: &'static str = "state";
 const ENV_FILE: &'static str = "env.json";
+const ALL_ENV_FILE: &'static str = ".env";
 const LINKS_FILE: &'static str = "links.toml";
 
 fn main() {
@@ -40,9 +42,9 @@ fn main() {
     let selected_env = args.env_name;
     let eval = args.eval;
 
-    let mut output = Vec::<String>::new();
+    let mut envs = Vec::<NewAndOldEnv>::new();
     if is_recursive {
-        let (tx, rx) = crossbeam_channel::unbounded::<Vec<String>>();
+        let (tx, rx) = crossbeam_channel::unbounded::<NewAndOldEnv>();
 
         ignore::WalkBuilder::new(".")
             .hidden(true)
@@ -61,8 +63,8 @@ fn main() {
                     if path.is_dir() {
                         let activate_file = path.join(ACTIVATE_TOML);
                         if activate_file.exists() {
-                            activate(&activate_file, selected_env.clone(), eval)
-                                .map(|o| tx.send(o).expect("Could not send output."));
+                            tx.send(activate(&activate_file, selected_env.clone()))
+                                .expect("Could not send output.");
                         }
                     }
                     ignore::WalkState::Continue
@@ -70,8 +72,8 @@ fn main() {
             });
 
         drop(tx);
-        for mut r in rx {
-            output.append(&mut r);
+        for r in rx {
+            envs.push(r);
         }
     } else {
         let activate_file = Path::new(ACTIVATE_TOML);
@@ -81,7 +83,39 @@ fn main() {
                 ACTIVATE_TOML
             );
         }
-        activate(&activate_file, selected_env, eval).map(|mut o| output.append(&mut o));
+        envs.push(activate(&activate_file, selected_env));
+    }
+    let env = envs.into_iter().fold(
+        NewAndOldEnv {
+            old_env: HashMap::new(),
+            new_env: HashMap::new(),
+        },
+        |mut acc, env| {
+            acc.old_env.extend(env.old_env);
+            acc.new_env.extend(env.new_env);
+            acc
+        },
+    );
+    let env_file_data = env.new_env.iter().fold(String::new(), |mut s, (k, v)| {
+        s.push_str(&format!("{}={}\n", k, v));
+        s
+    });
+    fs::write(Path::new(ACTIVATE_DIR).join(ALL_ENV_FILE), env_file_data)
+        .expect(format!("Could not write to `{}` file.", ALL_ENV_FILE).as_str());
+    let mut output = Vec::<String>::new();
+    if eval {
+        let mut keys: Vec<&String> = env.old_env.keys().collect();
+        keys.sort();
+        for key in keys {
+            output.push(format!("unset {}", key));
+        }
+        let mut keys: Vec<&String> = env.new_env.keys().collect();
+        keys.sort();
+        for key in keys {
+            if let Some(value) = env.new_env.get(key) {
+                output.push(format!("export {}={}", key, value));
+            }
+        }
     }
 
     let output = output.join("\n");
@@ -90,8 +124,13 @@ fn main() {
     }
 }
 
+struct NewAndOldEnv {
+    old_env: HashMap<String, String>,
+    new_env: HashMap<String, String>,
+}
+
 /// Sources parameters and activates the environment. Returns a strings to set the environment variables if `eval` is true.
-fn activate(activate_file: &Path, selected_env: Option<String>, eval: bool) -> Option<Vec<String>> {
+fn activate(activate_file: &Path, selected_env: Option<String>) -> NewAndOldEnv {
     let contents = fs::read_to_string(&activate_file)
         .expect(&format!("Could not read `{}` file.", ACTIVATE_TOML));
     let toml: Environments =
@@ -104,7 +143,7 @@ fn activate(activate_file: &Path, selected_env: Option<String>, eval: bool) -> O
     let links_file = state_dir.join(LINKS_FILE);
 
     let new_env: Option<HashMap<String, String>>;
-    let old_env_vars;
+    let old_active_env;
     if let Some(selected_env) = &selected_env {
         let EnvironmentData { env, links } = toml
             .0
@@ -113,9 +152,9 @@ fn activate(activate_file: &Path, selected_env: Option<String>, eval: bool) -> O
             .expect(&format!("'{}' is not a valid environment", &selected_env));
 
         if state_dir.exists() {
-            old_env_vars = decativate_current(&env_file, &links_file, &current_dir);
+            old_active_env = decativate_current(&env_file, &links_file, &current_dir);
         } else {
-            old_env_vars = None;
+            old_active_env = None;
             fs::create_dir_all(&state_dir).expect(&format!(
                 "Could not create `{}` directory.",
                 state_dir.to_string_lossy()
@@ -127,36 +166,17 @@ fn activate(activate_file: &Path, selected_env: Option<String>, eval: bool) -> O
         new_env = env;
     } else {
         if state_dir.exists() {
-            old_env_vars = decativate_current(&env_file, &links_file, &current_dir);
+            old_active_env = decativate_current(&env_file, &links_file, &current_dir);
         } else {
-            old_env_vars = None;
+            old_active_env = None;
         }
         new_env = None;
     }
 
-    if eval {
-        let mut output: Vec<String> = Vec::new();
-        if let Some(old_env) = old_env_vars {
-            if let Some(old_env_vars) = old_env.0 {
-                let mut keys: Vec<String> = old_env_vars.into_keys().collect();
-                keys.sort();
-                for key in keys {
-                    output.push(format!("unset {}", key));
-                }
-            }
-        }
-        if let Some(env) = new_env {
-            let mut keys: Vec<&str> = env.keys().map(|k| k.as_str()).collect();
-            keys.sort();
-            for key in keys {
-                if let Some(value) = env.get(key) {
-                    output.push(format!("export {}={}", key, value));
-                }
-            }
-        }
-        return Some(output);
+    NewAndOldEnv {
+        old_env: old_active_env.map(|e| e.0).flatten().unwrap_or_default(),
+        new_env: new_env.unwrap_or_default(),
     }
-    return None;
 }
 
 #[derive(Debug, Deserialize)]
@@ -256,11 +276,7 @@ fn create_gitignore_file(state_dir: &Path) {
 
 //************************************************************************//
 
-fn add_links(
-    links: &HashMap<String, String>,
-    current_links_file: &Path,
-    current_dir: &Path,
-) {
+fn add_links(links: &HashMap<String, String>, current_links_file: &Path, current_dir: &Path) {
     let mut links_file = File::options()
         .create(true)
         .append(true)
