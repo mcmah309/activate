@@ -3,7 +3,7 @@
 A sane way to manage your environments.
 
 ## Problem Statement
-Configuration should not require additional code to build or load envinments.
+Configuration should not require additional code to build or load environments.
 Yet code in Dev, QA, Prod, etc. need different configurations to run. 
 The solution often used is loading environment variables or property files at build or run time.
 This by itself has a few drawbacks:
@@ -15,7 +15,7 @@ This by itself has a few drawbacks:
 ## Solution
 `activate` solves all these problems and more.
 - Create a `active.toml` file and declaratively define your environments.
-- Load and unloading an environment is as easy as `activate <name>` and deactivate with just `activate`.
+- Loading and unloading an environment is as easy as `activate <name>` and deactivate with just `activate`.
 - No custom build scripts necessary, have per environment managed files/directories and environment variables.
 - Switch an entire mono-repo with `activate -r <name>`, all directories containing `activate.toml` are switched to `<name>`.
 
