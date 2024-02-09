@@ -22,37 +22,38 @@ This by itself has a few drawbacks:
 ## Example Use Cases
 
 1. You have assets, data files, executables, or program files that should be used in different environments like Dev, QA, etc. 
-```toml
-[dev.links]
-"path/to/dev/data" = "app/data"
+    ```toml
+    [dev.links]
+    "path/to/dev/data" = "app/data"
 
-[qa.links]
-"path/to/qa/data" = "app/data"
-```
-`app/data` is symlinked to the file or directory of the active environment.
+    [qa.links]
+    "path/to/qa/data" = "app/data"
+    ```
+    `app/data` is symlinked to the file or directory of the active environment.
 
 2. You want to load an environment variables
-```toml
-[dev.env]
-HOST = "localhost"
-PORT = 3000
+    ```toml
+    [dev.env]
+    HOST = "localhost"
+    PORT = 3000
 
-[qa.env]
-HOST = "178.32.44.2"
-PORT = 443
-```
-To load into your current shell run (this will also unload any activate environment).
-```bash
-eval "$(activate -e <name>)"`
-```
-Alternatively you can load the active `.env` file yourself or from an application, located at `.activate/.env`.
-This can also be particularly useful for dev containers. Just add `"runArgs": ["--env-file",".activate/.env"]` to your
-`.devcontainer/devcontainer.json` file.
+    [qa.env]
+    HOST = "178.32.44.2"
+    PORT = 443
+    ```
+    To load into your current shell run (this will also unload any activate environment).
+    ```bash
+    eval "$(activate -e <name>)"`
+    ```
+    Alternatively you can load the active `.env` file yourself or from an application, located at `.activate/.env`.
+    This can also be particularly useful for dev containers. Just add `"runArgs": ["--env-file",".activate/.env"]` to your
+    `.devcontainer/devcontainer.json` file.
+
 3. You are using a mono-repo and want to switch everything to a certain environment. Run:
-```bash
-activate -r <name>
-```
-any directory/subdirecory (respecting `.gitignore`) with an `activate.toml` file is switched to `<name>`
+    ```bash
+    activate -r <name>
+    ```
+    any directory/subdirecory (respecting `.gitignore`) with an `activate.toml` file is switched to `<name>`
 
 ## activate.toml Schema
 ```
