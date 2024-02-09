@@ -1,9 +1,8 @@
 use clap::Parser;
 use core::panic;
-use serde::{de::value, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    f32::consts::E,
     fs::{self, File},
     io::Write,
     path::{Path, PathBuf},
