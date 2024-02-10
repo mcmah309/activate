@@ -24,10 +24,10 @@ This by itself has a few drawbacks:
 1. You have assets, data files, executables, or program files that should be used in different environments like Dev, QA, etc. 
     ```toml
     [dev.links]
-    "path/to/dev/data" = "app/data"
+    "app/data" = "path/to/dev/data"
 
     [qa.links]
-    "path/to/qa/data" = "app/data"
+    "app/data" = "path/to/qa/data"
     ```
     `app/data` is symlinked to the file or directory of the active environment.
 

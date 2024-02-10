@@ -282,7 +282,7 @@ fn add_links(links: &HashMap<String, String>, current_links_file: &Path, current
         .open(current_links_file)
         .expect(&format!("Could not open `{}` file.", LINKS_FILE));
     for (key, value) in links {
-        let source = Path::new(&key);
+        let source = Path::new(&value);
         if source.starts_with("./") || source.starts_with("../") {
             panic!("The source `{}` should not start with `./` or `../`. The source is relative to the `.activate` directory.", source.to_string_lossy());
         }
@@ -293,7 +293,7 @@ fn add_links(links: &HashMap<String, String>, current_links_file: &Path, current
         if !source.exists() {
             panic!("The source `{}` does not exist.", source.to_string_lossy());
         }
-        let target = Path::new(&value);
+        let target = Path::new(&key);
         if target.starts_with("./") || target.starts_with("../") {
             panic!("The target `{}` should not start with `./` or `../`. The target is relative to the `.activate` directory.", target.to_string_lossy());
         }
@@ -314,34 +314,34 @@ fn add_links(links: &HashMap<String, String>, current_links_file: &Path, current
                 LINKS_FILE,
                 current_dir.to_string_lossy()
             ));
-        let depth_adjustment = PathBuf::from(value)
+        let depth_adjustment = PathBuf::from(key)
             .components()
             .skip(1)
             .fold(PathBuf::new(), |p, _| p.join(".."));
-        let link_path = depth_adjustment.join(key);
+        let link_path = depth_adjustment.join(value);
         #[cfg(windows)]
         {
-            let metadata = fs::symlink_metadata(&key)
+            let metadata = fs::symlink_metadata(&value)
                 .expect(&format!("Could not get metadata for `{}`.", &key));
             if metadata.is_dir() {
                 std::os::windows::fs::symlink_any(link_path, target).expect(&format!(
-                    "Could not create link from `{}` to `{}`, in directory `{}`.",
+                    "Could not link entity `{}` to `{}`, in directory `{}`.",
                     &key,
                     &value,
-                    current_active_dir.to_string_lossy()
+                    current_dir.to_string_lossy()
                 ));
             } else {
                 std::os::windows::fs::symlink_file(link_path, target).expect(&format!(
-                    "Could not create link from `{}` to `{}`, in directory `{}`.",
+                    "Could not link entity `{}` to `{}`, in directory `{}`.",
                     &key,
                     &value,
-                    current_active_dir.to_string_lossy()
+                    current_dir.to_string_lossy()
                 ));
             }
         }
         #[cfg(unix)]
         std::os::unix::fs::symlink(link_path, target).expect(&format!(
-            "Could not create link from `{}` to `{}`, in directory `{}`.",
+            "Could not link entity `{}` to `{}`, in directory `{}`.",
             &key,
             &value,
             current_dir.to_string_lossy()
@@ -355,8 +355,8 @@ fn remove_links(current_links_file: &Path, current_dir: &Path) {
     let links = toml::from_str::<ActiveEnvironmentLinks>(&links_string)
         .expect(&format!("Could not parse `{}` file.", LINKS_FILE));
     if let Some(links) = links.0 {
-        for (_key, value) in links {
-            let target = current_dir.join(&value);
+        for (key, _value) in links {
+            let target = current_dir.join(&key);
             if target.exists() {
                 if target.is_symlink() {
                     fs::remove_file(&target).expect(&format!(

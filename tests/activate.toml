@@ -3,9 +3,9 @@ PYTHONPATH = "src"
 DJANGO_SETTINGS_MODULE = "settings"
 
 [test.links]
-".activate/test/test_file1" = "another/test_file1"
-".activate/test/test_file2" = "test_file2_new_name"
-".activate/test/test_file3" = "test_file3"
+"another/test_file1" = ".activate/test/test_file1"
+"test_file2_new_name" = ".activate/test/test_file2"
+"test_file3" = ".activate/test/test_file3"
 
 [dev.env]
 XDG_CONFIG_HOME = "config"
@@ -13,8 +13,8 @@ XDG_DATA_HOME = "data"
 XDG_CACHE_HOME = "cache"
 
 [dev.links]
-".activate/dev/dev_file1" = "dev_file1"
+"dev_file1" = ".activate/dev/dev_file1"
 
 
 [prod.links]
-".activate/prod" = "prod_dir"
+"prod_dir" = ".activate/prod"

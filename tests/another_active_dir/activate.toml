@@ -3,4 +3,4 @@ TEST_ENV = "test"
 TEST_ENV2 = "test2"
 
 [test.links]
-"test/test_file4" = "test_file4"
+"test_file4" = "test/test_file4"
