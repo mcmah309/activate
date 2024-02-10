@@ -1,5 +1,9 @@
 # activate
 
+[![crates.io](https://img.shields.io/crates/v/activate)](https://crates.io/crates/activate)
+[![License: MIT](https://img.shields.io/badge/license-MIT-purple.svg)](https://opensource.org/licenses/MIT)
+[![Build Status](https://github.com/mcmah309/activate/actions/workflows/rust.yml/badge.svg)](https://github.com/mcmah309/activate/actions)
+
 A sane way to manage your environments.
 
 ## Problem Statement
