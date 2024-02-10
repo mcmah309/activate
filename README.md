@@ -67,6 +67,12 @@ This by itself has a few drawbacks:
 "<LINK_PATH_FROM_ROOT>" = "<SOURCE_PATH_FROM_ROOT>"
 ```
 
+## Install
+
+```bash
+cargo install activate
+```
+
 ## ROADMAP
 - Allow activating multiple environments at the same time
 - Allow specifying environment entering and leaving scripts
