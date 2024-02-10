@@ -3,17 +3,16 @@
 A sane way to manage your environments.
 
 ## Problem Statement
-Configuration should not require additional code to build or load environments.
-Yet code in Dev, QA, Prod, etc. need different configurations to run. 
+Code in different environments such as Dev, QA, Prod, etc. may need various configurations to run. 
 The solution often used is loading environment variables or property files at build or run time.
 This by itself has a few drawbacks:
-- Setting up environments may take some additional impartive configuration.
+- Setting up environments may take some additional impartive configuration or worse user setup.
 - Switching between environments is tedious.
 - Developers may have to maintain custom impementations and build scripts.
 - No good solution exists for switching entire mono-repos between environments.
 
 ## Solution
-`activate` solves all these problems and more.
+`activate` solves all these problems.
 - Create a `active.toml` file and declaratively define your environments.
 - Loading and unloading an environment is as easy as `activate <name>` and deactivate with just `activate`.
 - No custom build scripts necessary, have per environment managed files/directories and environment variables.
@@ -21,7 +20,7 @@ This by itself has a few drawbacks:
 
 ## Example Use Cases
 
-1. You have assets, data files, executables, or program files that should be used in different environments like Dev, QA, etc. 
+1. You have assets, data files, executables, or program files that should be used in different environments like Dev, QA, etc. e.g.
     ```toml
     [dev.links]
     "app/data" = "path/to/dev/data"
@@ -29,9 +28,9 @@ This by itself has a few drawbacks:
     [qa.links]
     "app/data" = "path/to/qa/data"
     ```
-    `app/data` is symlinked to the file or directory of the active environment.
+    `app/data` is created and symlinked to the file or directory of the active environment.
 
-2. You want to load an environment variables
+2. You want different environment variables in each environment e.g.
     ```toml
     [dev.env]
     HOST = "localhost"
@@ -46,7 +45,7 @@ This by itself has a few drawbacks:
     eval "$(activate -e <name>)"`
     ```
     Alternatively you can load the active `.env` file yourself or from an application, located at `.activate/.env`.
-    This can also be particularly useful for dev containers. Just add `"runArgs": ["--env-file",".activate/.env"]` to your
+    This can also be useful for dev containers. Just add `"runArgs": ["--env-file",".activate/.env"]` to your
     `.devcontainer/devcontainer.json` file.
 
 3. You are using a mono-repo and want to switch everything to a certain environment. Run:
@@ -61,7 +60,7 @@ This by itself has a few drawbacks:
 <ENV_VAR_NAME> = <ENV_VAR_VALUE>
 
 [<ENV_NAME>.links]
-"<SOURCE_PATH_FROM_ROOT>" = "<TARGET_PATH_FROM_ROOT>"
+"<LINK_PATH_FROM_ROOT>" = "<SOURCE_PATH_FROM_ROOT>"
 ```
 
 ## ROADMAP
