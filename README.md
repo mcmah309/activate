@@ -46,7 +46,7 @@ This by itself has a few drawbacks:
     ```
     To load into your current shell run (this will also unload any activate environment).
     ```bash
-    eval "$(activate -e <name>)"`
+    eval "$(activate -e <name>)"
     ```
     Alternatively you can load the active `.env` file yourself or from an application, located at `.activate/.env`.
     This can also be useful for dev containers. Just add `"runArgs": ["--env-file",".activate/.env"]` to your

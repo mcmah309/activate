@@ -1,5 +1,8 @@
-use clap::Parser;
-use core::panic;
+use clap::{error, Parser};
+use error_set::Coerce;
+use errors::{
+    ActivateEnvError, ActivateError, AddEnvError, AddLinkError, DeActivateOldEnv, RemoveEnvError, RemoveLinkError, UnrecoverableError, UserDisplayError
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -7,6 +10,8 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
 };
+
+mod errors;
 
 #[derive(Parser, Debug)]
 #[clap(about = r#"
@@ -34,7 +39,25 @@ const ENV_FILE: &'static str = "env.json";
 const ALL_ENV_FILE: &'static str = ".env";
 const LINKS_FILE: &'static str = "links.toml";
 
+fn report_error(error: ActivateError) {
+    let message = match error {
+        ActivateError::IoError(_) => {
+            format!("An Io error prevented activate from completely successfully.")
+        }
+        ActivateError::ParsingOldEnv(_) => String::new(),
+        ActivateError::UserDisplay(error) => error.0,
+    };
+    eprintln!("{}", message);
+}
+
 fn main() {
+    match run() {
+        Ok(ok) => {}
+        Err(error) => report_error(error),
+    }
+}
+
+fn run() -> Result<(), ActivateError> {
     let args: Activate = Activate::parse();
 
     let is_recursive = args.recursive;
@@ -57,13 +80,13 @@ fn main() {
                 let tx = tx.clone();
                 let selected_env = selected_env.clone();
                 Box::new(move |result| {
-                    let entry = result.expect("Could not get entry.");
+                    let entry = result.expect("Logic Error: Could not get directory of activate.toml file entry.");
                     let path = entry.path();
                     if path.is_dir() {
                         let activate_file = path.join(ACTIVATE_TOML);
                         if activate_file.exists() {
-                            tx.send(activate(&activate_file, selected_env.clone()))
-                                .expect("Could not send output.");
+                            tx.send(activate_env(&activate_file, selected_env.clone()))
+                                .expect("Logic Error: Could not send output out inner activate.toml resolution to this.");
                         }
                     }
                     ignore::WalkState::Continue
@@ -77,12 +100,12 @@ fn main() {
     } else {
         let activate_file = Path::new(ACTIVATE_TOML);
         if !activate_file.exists() {
-            panic!(
-                "No `{}` file found in the current directory.",
-                ACTIVATE_TOML
-            );
+            return Err(ActivateError::UserDisplay(
+                "No `{}` file found in the current directory."
+                    .into(),
+            ));
         }
-        envs.push(activate(&activate_file, selected_env));
+        envs.push(activate_env(&activate_file, selected_env));
     }
     let env = envs.into_iter().fold(
         NewAndOldEnv {
@@ -99,8 +122,7 @@ fn main() {
         s.push_str(&format!("{}={}\n", k, v));
         s
     });
-    fs::write(Path::new(ACTIVATE_DIR).join(ALL_ENV_FILE), env_file_data)
-        .expect(format!("Could not write to `{}` file.", ALL_ENV_FILE).as_str());
+    fs::write(Path::new(ACTIVATE_DIR).join(ALL_ENV_FILE), env_file_data).coerce()?;
     let mut output = Vec::<String>::new();
     if eval {
         let mut keys: Vec<&String> = env.old_env.keys().collect();
@@ -121,6 +143,7 @@ fn main() {
     if !output.is_empty() {
         println!("{}", output);
     }
+    Ok(())
 }
 
 struct NewAndOldEnv {
@@ -129,11 +152,15 @@ struct NewAndOldEnv {
 }
 
 /// Sources parameters and activates the environment. Returns a strings to set the environment variables if `eval` is true.
-fn activate(activate_file: &Path, selected_env: Option<String>) -> NewAndOldEnv {
+fn activate_env(
+    activate_file: &Path,
+    selected_env: Option<String>,
+) -> Result<NewAndOldEnv, ActivateEnvError> {
     let contents = fs::read_to_string(&activate_file)
-        .expect(&format!("Could not read `{}` file.", ACTIVATE_TOML));
+        .coerce()
+        .inspect_err(|_| eprintln!("Could not read `{}` file.", ACTIVATE_TOML))?;
     let toml: Environments =
-        toml::from_str(&contents).expect(&format!("Could not parse `{}`.", ACTIVATE_TOML));
+        toml::from_str(&contents).inspect_err(|_| eprintln!("Could not parse `{}`.", ACTIVATE_TOML)).coerce()?;
 
     let current_dir = activate_file.parent().unwrap();
     let activate_dir = current_dir.join(ACTIVATE_DIR);
@@ -146,7 +173,7 @@ fn activate(activate_file: &Path, selected_env: Option<String>) -> NewAndOldEnv 
     if let Some(selected_env) = &selected_env {
         let EnvironmentData { env, links } = toml
             .0
-            .expect(&format!("No environments found in `{}`.", ACTIVATE_TOML))
+            .ok_or(ActivateEnvError::NoEnvironmentsFound)?
             .remove(selected_env)
             .expect(&format!("'{}' is not a valid environment", &selected_env));
 
@@ -197,18 +224,18 @@ fn decativate_current(
     current_env_file: &Path,
     current_links_file: &Path,
     current_dir: &Path,
-) -> Option<ActiveEnvironmentEnv> {
+) -> Result<Option<ActiveEnvironmentEnv>, DeActivateOldEnv> {
     let old_env_vars;
     if current_env_file.exists() {
-        old_env_vars = Some(remove_env(current_env_file));
+        old_env_vars = Some(remove_env(current_env_file)?);
     } else {
         old_env_vars = None;
     }
     if current_links_file.exists() {
-        remove_links(current_links_file, current_dir);
+        remove_links(current_links_file, current_dir)?;
     }
 
-    old_env_vars
+    Ok(old_env_vars)
 }
 
 /// Activates the new environment.
@@ -229,127 +256,116 @@ fn activate_new(
 
 //************************************************************************//
 
-fn add_env(env_vars: &HashMap<String, String>, env_file: &Path) {
+fn add_env(env_vars: &HashMap<String, String>, env_file: &Path) -> Result<(), AddEnvError> {
     let mut env_file = File::options()
         .create(true)
         .append(true)
         .open(&env_file)
-        .expect(&format!("Could not create `{}` file.", ENV_FILE));
+        .map_err::<std::io::Error, _>(Into::into)?;
     env_file
         .write(
             serde_json::to_string(&ActiveEnvironmentEnv(Some(env_vars.clone())))
                 .expect("Could not serialize environment variables")
                 .as_bytes(),
         )
-        .expect(&format!("Could not write to `{}` file.", ENV_FILE));
+        .map_err::<std::io::Error, _>(Into::into)?;
+    Ok(())
 }
 
-fn remove_env(current_env_file: &Path) -> ActiveEnvironmentEnv {
-    let env_string = fs::read_to_string(&current_env_file)
-        .expect(&format!("Could not read `{}` file.", ENV_FILE));
-    let old_env_vars_result = serde_json::from_str::<ActiveEnvironmentEnv>(&env_string);
-    let old_env_vars = match old_env_vars_result {
+fn remove_env(current_env_file: &Path) -> Result<ActiveEnvironmentEnv, RemoveEnvError> {
+    let env_string =
+        fs::read_to_string(&current_env_file).map_err::<std::io::Error, _>(Into::into)?;
+    let old_env_parsed_result = serde_json::from_str::<ActiveEnvironmentEnv>(&env_string);
+    let old_env_vars = match old_env_parsed_result {
         Ok(ok) => ok,
         Err(err) => {
             if err.is_eof() {
                 ActiveEnvironmentEnv(None)
             } else {
-                panic!("Could not parse `{}` file. Error was: {}", ENV_FILE, err)
+                return Err(RemoveEnvError::ParsingOldEnv(err));
             }
         }
     };
 
-    fs::remove_file(&current_env_file).expect(&format!(
-        "Could not remove `{}` file. Environemnt is still active.",
-        ENV_FILE
-    ));
-
-    old_env_vars
+    fs::remove_file(&current_env_file).map_err::<std::io::Error, _>(Into::into);
+    Ok(old_env_vars)
 }
 
 //************************************************************************//
 
-fn create_gitignore_file(activate_dir: &Path) {
-    fs::write(&activate_dir.join(".gitignore"), "state/\n.env").expect("Could not create `.gitignore` file.");
+fn create_gitignore_file(activate_dir: &Path) -> Result<(), UnrecoverableError> {
+    fs::write(&activate_dir.join(".gitignore"), "state/\n.env").map_err(|_| {
+        UnrecoverableError::UserDisplay("Could not create `.gitignore` file.".into())
+    })
 }
 
 //************************************************************************//
 
-fn add_links(links: &HashMap<String, String>, current_links_file: &Path, current_dir: &Path) {
+fn add_links(
+    links: &HashMap<String, String>,
+    current_links_file: &Path,
+    current_dir: &Path,
+) -> Result<(), AddLinkError> {
     let mut links_file = File::options()
         .create(true)
         .append(true)
         .open(current_links_file)
-        .expect(&format!("Could not open `{}` file.", LINKS_FILE));
+        .map_err::<std::io::Error, _>(Into::into)?;
     for (key, value) in links {
         let source = Path::new(&value);
         if source.starts_with("./") || source.starts_with("../") {
-            panic!("The source `{}` should not start with `./` or `../`. The source is relative to the `.activate` directory.", source.to_string_lossy());
+            return Err(AddLinkError::UserDisplay(format!("The source `{}` should not start with `./` or `../`. The source is relative to the directory containing the `.activate` directory.", source.to_string_lossy()).into()));
         }
         let mut source = current_dir.join(source);
         if source.starts_with("./") {
             source = source.strip_prefix("./").unwrap().to_path_buf();
         }
         if !source.exists() {
-            panic!("The source `{}` does not exist.", source.to_string_lossy());
+            return Err(AddLinkError::UserDisplay(
+                format!("The source `{}` does not exist.", source.to_string_lossy()).into(),
+            ));
         }
         let target = Path::new(&key);
         if target.starts_with("./") || target.starts_with("../") {
-            panic!("The target `{}` should not start with `./` or `../`. The target is relative to the `.activate` directory.", target.to_string_lossy());
+            return Err(AddLinkError::UserDisplay(format!("The target `{}` should not start with `./` or `../`. The target is relative to the directory containing the `.activate` directory.", target.to_string_lossy()).into()));
         }
         let mut target = current_dir.join(target);
         if target.starts_with("./") {
             target = target.strip_prefix("./").unwrap().to_path_buf();
         }
         if target.exists() {
-            panic!("The target `{}` already exists.", target.to_string_lossy());
+            return Err(AddLinkError::UserDisplay(
+                format!("The target `{}` already exists.", target.to_string_lossy()).into(),
+            ));
         }
         if target.is_symlink() {
-            panic!("The link `{}` already exists.", target.to_string_lossy());
-        }
-        links_file
-            .write_all(&format!("\"{}\"=\"{}\"\n", key, value).as_bytes())
-            .expect(&format!(
-                "Could not write to `{}` file. In directory `{}`.",
-                LINKS_FILE,
-                current_dir.to_string_lossy()
+            return Err(AddLinkError::UserDisplay(
+                format!("The link `{}` already exists.", target.to_string_lossy()).into(),
             ));
+        }
+        links_file.write_all(&format!("\"{}\"=\"{}\"\n", key, value).as_bytes())?;
         let depth_adjustment = PathBuf::from(key)
             .components()
             .skip(1)
             .fold(PathBuf::new(), |p, _| p.join(".."));
         let link_path = depth_adjustment.join(value);
-        #[cfg(windows)]
-        {
-            let metadata = fs::symlink_metadata(&value)
-                .expect(&format!("Could not get metadata for `{}`.", &key));
-            if metadata.is_dir() {
-                std::os::windows::fs::symlink_any(link_path, target).expect(&format!(
-                    "Could not link entity `{}` to `{}`, in directory `{}`.",
-                    &key,
-                    &value,
-                    current_dir.to_string_lossy()
-                ));
-            } else {
-                std::os::windows::fs::symlink_file(link_path, target).expect(&format!(
-                    "Could not link entity `{}` to `{}`, in directory `{}`.",
-                    &key,
-                    &value,
-                    current_dir.to_string_lossy()
-                ));
-            }
-        }
+        // #[cfg(windows)]
+        // {
+        //     let metadata = fs::symlink_metadata(&value)
+        //         .expect(&format!("Could not get metadata for `{}`.", &key)).into(Into::into);
+        //     if metadata.is_dir() {
+        //         std::os::windows::fs::symlink_any(link_path, target).into();
+        //     } else {
+        //         std::os::windows::fs::symlink_file(link_path, target).into();
+        //     }
+        // }
         #[cfg(unix)]
-        std::os::unix::fs::symlink(link_path, target).expect(&format!(
-            "Could not link entity `{}` to `{}`, in directory `{}`.",
-            &key,
-            &value,
-            current_dir.to_string_lossy()
-        ));
+        return std::os::unix::fs::symlink(link_path, target).coerce();
     }
+    Ok(())
 }
 
-fn remove_links(current_links_file: &Path, current_dir: &Path) {
+fn remove_links(current_links_file: &Path, current_dir: &Path) -> Result<(), RemoveLinkError> {
     let links_string = fs::read_to_string(&current_links_file)
         .expect(&format!("Could not read `{}` file.", LINKS_FILE));
     let links = toml::from_str::<ActiveEnvironmentLinks>(&links_string)
@@ -359,19 +375,13 @@ fn remove_links(current_links_file: &Path, current_dir: &Path) {
             let target = current_dir.join(&key);
             if target.exists() {
                 if target.is_symlink() {
-                    fs::remove_file(&target).expect(&format!(
-                        "Could not remove link `{}`.",
-                        target.to_string_lossy()
-                    ));
+                    fs::remove_file(&target)?;
                 } else {
-                    panic!("The existing link `{}` is not a symlink. Therefore it will not be removed.", target.to_string_lossy());
+                    return Err(RemoveLinkError::NotASymlink(format!("The existing link `{}` is not a symlink. Therefore it will not be removed.", target.to_string_lossy()).into()));
                 }
             }
         }
-    }
+    };
 
-    fs::remove_file(&current_links_file).expect(&format!(
-        "Could not remove `{}` file. Links are still active.",
-        LINKS_FILE
-    ));
+    fs::remove_file(&current_links_file).coerce()
 }
