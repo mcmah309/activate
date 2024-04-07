@@ -281,7 +281,7 @@ fn add_links(links: &HashMap<String, String>, current_links_file: &Path, current
     for (key, value) in links {
         let source = Path::new(&value);
         if source.starts_with("./") || source.starts_with("../") {
-            exit(&format!("The source `{}` should not start with `./` or `../`. The source is relative to the `.activate` directory.", source.to_string_lossy()));
+            exit(&format!("The source `{}` should not start with `./` or `../`. The source is relative to the `activate.toml` directory and below.", source.to_string_lossy()));
         }
         let mut source = current_dir.join(source);
         if source.starts_with("./") {
@@ -292,7 +292,7 @@ fn add_links(links: &HashMap<String, String>, current_links_file: &Path, current
         }
         let target = Path::new(&key);
         if target.starts_with("./") || target.starts_with("../") {
-            exit(&format!("The target `{}` should not start with `./` or `../`. The target is relative to the `.activate` directory.", target.to_string_lossy()));
+            exit(&format!("The target `{}` should not start with `./` or `../`. The target is relative to the `activate.toml` directory and below.", target.to_string_lossy()));
         }
         let mut target = current_dir.join(target);
         if target.starts_with("./") {
