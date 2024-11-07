@@ -1,3 +1,4 @@
+
 use std::{collections::HashMap, env, fs, path::Path, sync::Once};
 
 use assert_cmd::cargo::CargoError;
@@ -20,6 +21,8 @@ pub fn initialize() {
         .assert();
     assert.success().stdout(predicate::str::contains(""));
 }
+
+//************************************************************************//
 
 #[test]
 fn links_switching_between() -> Result<(), CargoError> {
@@ -133,7 +136,6 @@ fn env_eval() -> Result<(), CargoError> {
 
     let assert = assert_cmd::Command::cargo_bin("activate")?
         .arg("test")
-        .arg("-e")
         .assert();
     assert.success().stdout(predicate::eq(
         r#"export DJANGO_SETTINGS_MODULE=settings
@@ -143,7 +145,6 @@ export PYTHONPATH=src
 
     let assert = assert_cmd::Command::cargo_bin("activate")?
         .arg("dev")
-        .arg("-e")
         .assert();
     assert.success().stdout(predicate::eq(
         r#"unset DJANGO_SETTINGS_MODULE
@@ -156,7 +157,6 @@ export XDG_DATA_HOME=data
 
     let assert = assert_cmd::Command::cargo_bin("activate")?
         .arg("prod")
-        .arg("-e")
         .assert();
     assert.success().stdout(predicate::eq(
         r#"unset XDG_CACHE_HOME
@@ -167,7 +167,6 @@ unset XDG_DATA_HOME
 
     let assert = assert_cmd::Command::cargo_bin("activate")?
         .arg("dev")
-        .arg("-e")
         .assert();
     assert.success().stdout(predicate::eq(
         r#"export XDG_CACHE_HOME=cache
@@ -177,9 +176,7 @@ export XDG_DATA_HOME=data
     ));
 
     // deactivate
-    let assert = assert_cmd::Command::cargo_bin("activate")?
-        .arg("-e")
-        .assert();
+    let assert = assert_cmd::Command::cargo_bin("activate")?.assert();
     assert.success().stdout(predicate::eq(
         r#"unset XDG_CACHE_HOME
 unset XDG_CONFIG_HOME
@@ -196,7 +193,6 @@ fn recursive() -> Result<(), CargoError> {
 
     let assert = assert_cmd::Command::cargo_bin("activate")?
         .arg("test")
-        .arg("-e")
         .arg("-r")
         .assert();
     assert.success().stdout(predicate::eq(
@@ -236,6 +232,7 @@ fn dot_env_file() -> Result<(), CargoError> {
 
     let assert = assert_cmd::Command::cargo_bin("activate")?
         .arg("test")
+        .arg("-s")
         .assert();
     assert.success().stdout(predicate::eq(""));
 
@@ -247,6 +244,7 @@ fn dot_env_file() -> Result<(), CargoError> {
     let assert = assert_cmd::Command::cargo_bin("activate")?
         .arg("test")
         .arg("-r")
+        .arg("-s")
         .assert();
     assert.success().stdout(predicate::eq(""));
 
