@@ -49,7 +49,7 @@ PORT = 3000
 HOST = "178.32.44.2"
 PORT = 443
 ```
-To load an environment into your current shell, and unload any activate environment, run
+To load an environment into the current shell, and unload any activate environment, run
 ```bash
 eval "$(activate <name>)"`
 ```
@@ -59,7 +59,7 @@ a() {
     eval "$(activate "$@")";
 }
 ```
-Then you can easily load and unload environments with an even shorter command
+Then environments can be easily loaded with an even shorter command
 ```bash
 a dev
 ```
