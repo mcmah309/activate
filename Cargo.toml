@@ -1,7 +1,7 @@
 [package]
 name = "activate"
 description = "A sane way to manage environment-specific configurations."
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/mcmah309/activate"
