@@ -11,7 +11,7 @@ A tool to manage environment-specific configurations. Simplifying working across
 Code in different environments such as Dev, QA, Prod, etc. may need various configurations to run. 
 The solution often used is loading environment variables or property files at build or run time.
 This by itself has a few drawbacks:
-- Setting up environments may take some additional imperative configuration or worse user setup.
+- Setting up environments may take some additional imperative configuration, or worse, manual developer setup.
 - Switching between environments is tedious.
 - Developers may have to maintain custom implementations and build scripts.
 - No good solution exists for switching entire monorepos between environments, without having on master config.
