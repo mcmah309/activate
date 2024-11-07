@@ -10,9 +10,9 @@ use std::{
 
 #[derive(Parser, Debug)]
 #[clap(about = r#"
-Cli tool for activating an environment specific configurations - environment variables, files, directories, etc.
+A tool to manage environment-specific configurations. Simplifying working across various settings like Development, Testing, Production, etc.
 "#)]
-struct Activate {
+struct ActivateArgs {
     /// Name of the environment to activate. If not provided, any active environment will be deactivated.
     env_name: Option<String>,
 
@@ -34,9 +34,9 @@ const ALL_ENV_FILE: &'static str = ".env";
 const LINKS_FILE: &'static str = "links.toml";
 
 fn main() {
-    let args: Activate = Activate::parse();
+    let args: ActivateArgs = ActivateArgs::parse();
 
-    let Activate {
+    let ActivateArgs {
         env_name: selected_env,
         silent,
         descendants,
