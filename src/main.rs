@@ -10,7 +10,7 @@ use std::{
 
 #[derive(Parser, Debug)]
 #[clap(about = r#"
-Activate an environment
+Cli tool for activating an environment specific configurations - environment variables, files, directories, etc.
 "#)]
 struct Activate {
     /// Name of the environment to activate. If not provided, any active environment will be deactivated.
@@ -20,10 +20,10 @@ struct Activate {
     #[arg(short, default_value = "false")]
     silent: bool,
 
-    /// If provided, will recursively activate the environment in the current directory and all subdirectories. Ignores files
+    /// If provided, will activate the environment in the current directory and all subdirectories. Ignores files
     /// specified in `.gitignore` and hidden files.
     #[arg(short, default_value = "false")]
-    recursive: bool,
+    descendants: bool,
 }
 
 const ACTIVATE_TOML: &'static str = "activate.toml";
@@ -36,12 +36,14 @@ const LINKS_FILE: &'static str = "links.toml";
 fn main() {
     let args: Activate = Activate::parse();
 
-    let is_recursive = args.recursive;
-    let selected_env = args.env_name;
-    let silent = args.silent;
+    let Activate {
+        env_name: selected_env,
+        silent,
+        descendants,
+    } = args;
 
     let mut envs = Vec::<NewAndOldEnv>::new();
-    if is_recursive {
+    if descendants {
         let (tx, rx) = crossbeam_channel::unbounded::<NewAndOldEnv>();
 
         ignore::WalkBuilder::new(".")
