@@ -1,8 +1,11 @@
 use clap::Parser;
-use core::panic;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap, fmt::Debug, fs::{self, File}, io::Write, path::{Path, PathBuf}
+    collections::HashMap,
+    fmt::Debug,
+    fs::{self, File},
+    io::Write,
+    path::{Path, PathBuf},
 };
 
 #[derive(Parser, Debug)]
@@ -13,10 +16,9 @@ struct Activate {
     /// Name of the environment to activate. If not provided, any active environment will be deactivated.
     env_name: Option<String>,
 
-    /// If provided, the command to unset the old env variables and load the new env will be sent to std out. This
-    /// is useful if you want your current shell to take on the output e.g. `eval "$(activate dev -e)"`. (Linux only)
+    /// If provided, the command to unset the old env variables and load the new env will not be sent to std out.
     #[arg(short, default_value = "false")]
-    eval: bool,
+    silent: bool,
 
     /// If provided, will recursively activate the environment in the current directory and all subdirectories. Ignores files
     /// specified in `.gitignore` and hidden files.
@@ -36,7 +38,7 @@ fn main() {
 
     let is_recursive = args.recursive;
     let selected_env = args.env_name;
-    let eval = args.eval;
+    let silent = args.silent;
 
     let mut envs = Vec::<NewAndOldEnv>::new();
     if is_recursive {
@@ -76,8 +78,8 @@ fn main() {
         if !activate_file.exists() {
             exit(&format!(
                 "No `{}` file found in the current directory.",
-                ACTIVATE_TOML)
-            );
+                ACTIVATE_TOML
+            ));
         }
         envs.push(activate(&activate_file, selected_env));
     }
@@ -98,8 +100,11 @@ fn main() {
     });
     fs::write(Path::new(ACTIVATE_DIR).join(ALL_ENV_FILE), env_file_data)
         .exit(format!("Could not write to `{}` file.", ALL_ENV_FILE).as_str());
+
     let mut output = Vec::<String>::new();
-    if eval {
+
+    // eval output
+    if !silent {
         let mut keys: Vec<&String> = env.old_env.keys().collect();
         keys.sort();
         for key in keys {
@@ -242,8 +247,8 @@ fn add_env(env_vars: &HashMap<String, String>, env_file: &Path) {
 }
 
 fn remove_env(current_env_file: &Path) -> ActiveEnvironmentEnv {
-    let env_string = fs::read_to_string(&current_env_file)
-        .exit(&format!("Could not read `{}` file.", ENV_FILE));
+    let env_string =
+        fs::read_to_string(&current_env_file).exit(&format!("Could not read `{}` file.", ENV_FILE));
     let old_env_vars_result = serde_json::from_str::<ActiveEnvironmentEnv>(&env_string);
     let old_env_vars = match old_env_vars_result {
         Ok(ok) => ok,
@@ -251,7 +256,10 @@ fn remove_env(current_env_file: &Path) -> ActiveEnvironmentEnv {
             if err.is_eof() {
                 ActiveEnvironmentEnv(None)
             } else {
-                exit(&format!("Could not parse `{}` file. Error was: {}", ENV_FILE, err));
+                exit(&format!(
+                    "Could not parse `{}` file. Error was: {}",
+                    ENV_FILE, err
+                ));
             }
         }
     };
@@ -267,7 +275,8 @@ fn remove_env(current_env_file: &Path) -> ActiveEnvironmentEnv {
 //************************************************************************//
 
 fn create_gitignore_file(activate_dir: &Path) {
-    fs::write(&activate_dir.join(".gitignore"), "state/\n.env").exit("Could not create `.gitignore` file.");
+    fs::write(&activate_dir.join(".gitignore"), "state/\n.env")
+        .exit("Could not create `.gitignore` file.");
 }
 
 //************************************************************************//
@@ -288,7 +297,10 @@ fn add_links(links: &HashMap<String, String>, current_links_file: &Path, current
             source = source.strip_prefix("./").unwrap().to_path_buf();
         }
         if !source.exists() {
-            exit(&format!("The source `{}` does not exist.", source.to_string_lossy()));
+            exit(&format!(
+                "The source `{}` does not exist.",
+                source.to_string_lossy()
+            ));
         }
         let target = Path::new(&key);
         if target.starts_with("./") || target.starts_with("../") {
@@ -299,10 +311,16 @@ fn add_links(links: &HashMap<String, String>, current_links_file: &Path, current
             target = target.strip_prefix("./").unwrap().to_path_buf();
         }
         if target.exists() {
-            exit(&format!("The target `{}` already exists.", target.to_string_lossy()));
+            exit(&format!(
+                "The target `{}` already exists.",
+                target.to_string_lossy()
+            ));
         }
         if target.is_symlink() {
-            exit(&format!("The link `{}` already exists.", target.to_string_lossy()));
+            exit(&format!(
+                "The link `{}` already exists.",
+                target.to_string_lossy()
+            ));
         }
         links_file
             .write_all(&format!("\"{}\"=\"{}\"\n", key, value).as_bytes())
@@ -373,7 +391,6 @@ fn remove_links(current_links_file: &Path, current_dir: &Path) {
     ));
 }
 
-
 //************************************************************************//
 
 fn exit(message: &str) -> ! {
@@ -390,10 +407,10 @@ fn exit_handler<E: Debug>(message: &str, error: E) -> ! {
 }
 
 trait Exit<T> {
-    fn exit(self,exit_message: &str) -> T;
+    fn exit(self, exit_message: &str) -> T;
 }
 
-impl<T,U: Debug> Exit<T> for Result<T,U> {
+impl<T, U: Debug> Exit<T> for Result<T, U> {
     fn exit(self, exit_message: &str) -> T {
         match self {
             Ok(ok) => ok,
@@ -406,7 +423,7 @@ impl<T> Exit<T> for Option<T> {
     fn exit(self, exit_message: &str) -> T {
         match self {
             Some(v) => v,
-            None => exit_handler(exit_message,std::backtrace::Backtrace::force_capture()),
+            None => exit_handler(exit_message, std::backtrace::Backtrace::force_capture()),
         }
     }
 }
