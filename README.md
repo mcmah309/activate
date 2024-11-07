@@ -48,6 +48,16 @@ This by itself has a few drawbacks:
     ```bash
     eval "$(activate -e <name>)"`
     ```
+    Consider adding the following to `~/.bashrc` as a shortcut
+    ```bash
+    a() {
+        eval "$(activate -e "$@")";
+    }
+    ```
+    To easily load and unload environments. e.g.
+    ```bash
+    a dev
+    ```
     Alternatively you can load the active `.env` file yourself or from an application, located at `.activate/.env`.
     This can also be useful for dev containers. Just add `"runArgs": ["--env-file",".activate/.env"]` to your
     `.devcontainer/devcontainer.json` file.
