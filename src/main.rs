@@ -316,26 +316,26 @@ fn add_links(links: &HashMap<String, String>, current_links_file: &Path, current
             .skip(1)
             .fold(PathBuf::new(), |p, _| p.join(".."));
         let link_path = depth_adjustment.join(value);
-        #[cfg(windows)]
-        {
-            let metadata = fs::symlink_metadata(&value)
-                .exit(&format!("Could not get metadata for `{}`.", &key));
-            if metadata.is_dir() {
-                std::os::windows::fs::symlink_any(link_path, target).exit(&format!(
-                    "Could not link entity `{}` to `{}`, in directory `{}`.",
-                    &key,
-                    &value,
-                    current_dir.to_string_lossy()
-                ));
-            } else {
-                std::os::windows::fs::symlink_file(link_path, target).exit(&format!(
-                    "Could not link entity `{}` to `{}`, in directory `{}`.",
-                    &key,
-                    &value,
-                    current_dir.to_string_lossy()
-                ));
-            }
-        }
+        // #[cfg(windows)]
+        // {
+        //     let metadata = fs::symlink_metadata(&value)
+        //         .exit(&format!("Could not get metadata for `{}`.", &key));
+        //     if metadata.is_dir() {
+        //         std::os::windows::fs::symlink_any(link_path, target).exit(&format!(
+        //             "Could not link entity `{}` to `{}`, in directory `{}`.",
+        //             &key,
+        //             &value,
+        //             current_dir.to_string_lossy()
+        //         ));
+        //     } else {
+        //         std::os::windows::fs::symlink_file(link_path, target).exit(&format!(
+        //             "Could not link entity `{}` to `{}`, in directory `{}`.",
+        //             &key,
+        //             &value,
+        //             current_dir.to_string_lossy()
+        //         ));
+        //     }
+        // }
         #[cfg(unix)]
         std::os::unix::fs::symlink(link_path, target).exit(&format!(
             "Could not link entity `{}` to `{}`, in directory `{}`.",
