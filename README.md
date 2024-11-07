@@ -14,7 +14,7 @@ This by itself has a few drawbacks:
 - Setting up environments may take some additional imperative configuration, or worse, manual developer setup.
 - Switching between environments is tedious.
 - Developers may have to maintain custom implementations and build scripts.
-- No good solution exists for switching entire monorepos between environments, without having on master config.
+- No good solution exists for switching entire monorepos between environments. Instead, a master config is often used.
 
 ### Solution
 `activate` solves all these problems.
