@@ -66,10 +66,10 @@ a dev
 
 ### Monorepo
 `activate.toml` files can be distributed across a codebase, where each application has its own
-`activate.toml` file. From the root of the repo everything can be switched together with the `-r`
+`activate.toml` file. From the root of the repo everything can be switched together with the `-d`
 flag. e.g.
 ```bash
-activate -r <name>
+activate -d <name>
 ```
 Any directory/subdirectory (respecting `.gitignore`) with an `activate.toml` file is switched to `<name>`.
 
