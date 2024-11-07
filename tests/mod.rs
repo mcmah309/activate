@@ -17,7 +17,7 @@ pub fn initialize() {
     // deactivate
     let assert = assert_cmd::Command::cargo_bin("activate")
         .unwrap()
-        .arg("-r")
+        .arg("-d")
         .assert();
     assert.success().stdout(predicate::str::contains(""));
 }
@@ -188,12 +188,12 @@ unset XDG_DATA_HOME
 }
 
 #[test]
-fn recursive() -> Result<(), CargoError> {
+fn descendants() -> Result<(), CargoError> {
     initialize();
 
     let assert = assert_cmd::Command::cargo_bin("activate")?
         .arg("test")
-        .arg("-r")
+        .arg("-d")
         .assert();
     assert.success().stdout(predicate::eq(
         r#"export DJANGO_SETTINGS_MODULE=settings
@@ -243,7 +243,7 @@ fn dot_env_file() -> Result<(), CargoError> {
 
     let assert = assert_cmd::Command::cargo_bin("activate")?
         .arg("test")
-        .arg("-r")
+        .arg("-d")
         .arg("-s")
         .assert();
     assert.success().stdout(predicate::eq(""));
