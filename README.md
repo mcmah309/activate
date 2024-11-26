@@ -84,6 +84,16 @@ Any directory/subdirectory (respecting `.gitignore`) with an `activate.toml` fil
 
 ## Install
 
+## Debian - Ubuntu, Linux Mint, Pop!_OS, etc.
+
+```bash
+release_ver=<INSERT_CURRENT_VERSION> # e.g. release_ver='v0.2.7'
+deb_file="activate_$(echo $release_ver | sed 's/^v//')-1_amd64.deb"
+curl -LO https://github.com/mcmah309/activate/releases/download/$release_ver/$deb_file
+dpkg -i "$deb_file"
+```
+
+## Cargo
 ```bash
 cargo install activate
 ```
