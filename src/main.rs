@@ -24,6 +24,10 @@ struct ActivateArgs {
     /// specified in `.gitignore` and hidden files.
     #[arg(short, default_value = "false")]
     descendants: bool,
+
+    /// Name of the configmap to create.
+    #[arg(long, default_value = "activate")]
+    configmap_name: String,
 }
 
 const ACTIVATE_TOML: &'static str = "activate.toml";
@@ -31,6 +35,7 @@ const ACTIVATE_DIR: &'static str = ".activate";
 const ACTIVATE_STATE_DIR: &'static str = "state";
 const ENV_FILE: &'static str = "env.json";
 const ALL_ENV_FILE: &'static str = ".env";
+const ALL_CONFIGMAP_FILE: &'static str = "configMap";
 const LINKS_FILE: &'static str = "links.toml";
 
 fn main() {
@@ -40,6 +45,7 @@ fn main() {
         env_name: selected_env,
         silent,
         descendants,
+        configmap_name,
     } = args;
 
     let mut envs = Vec::<NewAndOldEnv>::new();
@@ -102,11 +108,31 @@ fn main() {
     });
     fs::write(Path::new(ACTIVATE_DIR).join(ALL_ENV_FILE), env_file_data)
         .exit(format!("Could not write to `{}` file.", ALL_ENV_FILE).as_str());
-
-    let mut output = Vec::<String>::new();
+    let configmap_file_data = env.new_env.iter().fold(
+        format!(
+            r#"
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {}
+data:
+"#,
+            configmap_name
+        ),
+        |mut s, (k, v)| {
+            s.push_str(&format!("  {}: \"{}\"\n", k, v));
+            s
+        },
+    );
+    fs::write(
+        Path::new(ACTIVATE_DIR).join(ALL_CONFIGMAP_FILE),
+        configmap_file_data,
+    )
+    .exit("Could not write to `configmap` file.");
 
     // eval output
     if !silent {
+        let mut output = Vec::<String>::new();
         let mut keys: Vec<&String> = env.old_env.keys().collect();
         keys.sort();
         for key in keys {
@@ -119,11 +145,10 @@ fn main() {
                 output.push(format!("export {}={}", key, value));
             }
         }
-    }
-
-    let output = output.join("\n");
-    if !output.is_empty() {
-        println!("{}", output);
+        if !output.is_empty() {
+            let output = output.join("\n");
+            println!("{}", output);
+        }
     }
 }
 
@@ -277,8 +302,11 @@ fn remove_env(current_env_file: &Path) -> ActiveEnvironmentEnv {
 //************************************************************************//
 
 fn create_gitignore_file(activate_dir: &Path) {
-    fs::write(&activate_dir.join(".gitignore"), "state/\n.env")
-        .exit("Could not create `.gitignore` file.");
+    fs::write(
+        &activate_dir.join(".gitignore"),
+        &format!("state/\n{}\n{}", ALL_ENV_FILE, ALL_CONFIGMAP_FILE),
+    )
+    .exit("Could not create `.gitignore` file.");
 }
 
 //************************************************************************//
