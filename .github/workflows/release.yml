@@ -58,7 +58,7 @@ jobs:
       - name: Install cargo-deb
         run: cargo install cargo-deb
       - name: Build .deb package
-        run: cargo deb
+        run: cargo deb --maintainer henry
       - name: Upload .deb to Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
