@@ -17,4 +17,4 @@ XDG_CACHE_HOME = "cache"
 
 [prod.links]
 "prod_dir" = ".activate/prod"
-".env" = ".activate/.env"
+".env" = ".activate/active/.env"

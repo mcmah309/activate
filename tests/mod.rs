@@ -235,7 +235,7 @@ fn dot_env_file() -> Result<(), CargoError> {
         .assert();
     assert.success().stdout(predicate::eq(""));
 
-    dotenv::from_path(Path::new(".activate/.env")).unwrap();
+    dotenv::from_path(Path::new(".activate/active/.env")).unwrap();
 
     assert_eq!(env::var("DJANGO_SETTINGS_MODULE").unwrap(), "settings");
     assert_eq!(env::var("PYTHONPATH").unwrap(), "src");
@@ -247,7 +247,7 @@ fn dot_env_file() -> Result<(), CargoError> {
         .assert();
     assert.success().stdout(predicate::eq(""));
 
-    dotenv::from_path(Path::new(".activate/.env")).unwrap();
+    dotenv::from_path(Path::new(".activate/active/.env")).unwrap();
 
     assert_eq!(env::var("DJANGO_SETTINGS_MODULE").unwrap(), "settings");
     assert_eq!(env::var("PYTHONPATH").unwrap(), "src");
@@ -261,8 +261,8 @@ fn dot_env_file() -> Result<(), CargoError> {
 fn env_file_is_valid_link() -> Result<(), CargoError> {
     initialize();
 
-    if Path::new(".activate/.env").exists() {
-        fs::remove_file(".activate/.env").unwrap();
+    if Path::new(".activate/active/.env").exists() {
+        fs::remove_file(".activate/active/.env").unwrap();
     }
 
     let assert = assert_cmd::Command::cargo_bin("activate")?

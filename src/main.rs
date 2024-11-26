@@ -33,13 +33,18 @@ struct ActivateArgs {
 const ACTIVATE_TOML: &'static str = "activate.toml";
 const ACTIVATE_DIR: &'static str = ".activate";
 const ACTIVATE_STATE_DIR: &'static str = ".state";
-const ENV_FILE: &'static str = "env.json";
+const ACTIVATE_ACTIVE_DIR: &'static str = "active";
+const STATE_ENV_FILE: &'static str = "env.json";
 const ALL_ENV_FILE: &'static str = ".env";
-const ALL_CONFIGMAP_FILE: &'static str = "configMap";
-const LINKS_FILE: &'static str = "links.toml";
+const ALL_ENV_JSON_FILE: &'static str = "env.json";
+const ALL_ENV_CONFIGMAP_FILE: &'static str = "configMap";
+const STATE_LINKS_FILE: &'static str = "links.toml";
 
 fn main() {
     let args: ActivateArgs = ActivateArgs::parse();
+
+    let active_dir = Path::new(ACTIVATE_DIR).join(ACTIVATE_ACTIVE_DIR);
+    ensure_active_files_exist(&active_dir);
 
     let ActivateArgs {
         env_name: selected_env,
@@ -102,6 +107,7 @@ fn main() {
             acc
         },
     );
+
     let env_file_data = env.new_env.iter().fold(
         r#"# Generated - managed by `activate`.
 
@@ -112,8 +118,14 @@ fn main() {
             s
         },
     );
-    fs::write(Path::new(ACTIVATE_DIR).join(ALL_ENV_FILE), env_file_data)
+    fs::write(active_dir.join(ALL_ENV_FILE), env_file_data)
         .exit(format!("Could not write to `{}` file.", ALL_ENV_FILE).as_str());
+
+    let json_env_file_data = serde_json::to_string_pretty(&env.new_env)
+        .expect("Could not serialize environment variables to json.");
+    fs::write(active_dir.join(ALL_ENV_JSON_FILE), json_env_file_data)
+        .exit(format!("Could not write to `{}` file.", ALL_ENV_JSON_FILE).as_str());
+
     let configmap_file_data = env.new_env.iter().fold(
         format!(
             r#"# Generated - managed by `activate`.
@@ -131,11 +143,8 @@ data:
             s
         },
     );
-    fs::write(
-        Path::new(ACTIVATE_DIR).join(ALL_CONFIGMAP_FILE),
-        configmap_file_data,
-    )
-    .exit("Could not write to `configmap` file.");
+    fs::write(active_dir.join(ALL_ENV_CONFIGMAP_FILE), configmap_file_data)
+        .exit(format!("Could not write to `{}` file.", ALL_ENV_CONFIGMAP_FILE).as_str());
 
     // eval output
     if !silent {
@@ -174,8 +183,9 @@ fn activate(activate_file: &Path, selected_env: Option<String>) -> NewAndOldEnv 
     let current_dir = activate_file.parent().unwrap();
     let activate_dir = current_dir.join(ACTIVATE_DIR);
     let state_dir = activate_dir.join(ACTIVATE_STATE_DIR);
-    let env_file = state_dir.join(ENV_FILE);
-    let links_file = state_dir.join(LINKS_FILE);
+    // let active_dir = activate_dir.join(ACTIVATE_ACTIVE_DIR);
+    let env_file = state_dir.join(STATE_ENV_FILE);
+    let links_file = state_dir.join(STATE_LINKS_FILE);
 
     let new_env: Option<HashMap<String, String>>;
     let old_active_env;
@@ -271,19 +281,19 @@ fn add_env(env_vars: &HashMap<String, String>, env_file: &Path) {
         .create(true)
         .append(true)
         .open(&env_file)
-        .exit(&format!("Could not create `{}` file.", ENV_FILE));
+        .exit(&format!("Could not create `{}` file.", STATE_ENV_FILE));
     env_file
         .write(
             serde_json::to_string(&ActiveEnvironmentEnv(Some(env_vars.clone())))
                 .exit("Could not serialize environment variables")
                 .as_bytes(),
         )
-        .exit(&format!("Could not write to `{}` file.", ENV_FILE));
+        .exit(&format!("Could not write to `{}` file.", STATE_ENV_FILE));
 }
 
 fn remove_env(current_env_file: &Path) -> ActiveEnvironmentEnv {
-    let env_string =
-        fs::read_to_string(&current_env_file).exit(&format!("Could not read `{}` file.", ENV_FILE));
+    let env_string = fs::read_to_string(&current_env_file)
+        .exit(&format!("Could not read `{}` file.", STATE_ENV_FILE));
     let old_env_vars_result = serde_json::from_str::<ActiveEnvironmentEnv>(&env_string);
     let old_env_vars = match old_env_vars_result {
         Ok(ok) => ok,
@@ -293,7 +303,7 @@ fn remove_env(current_env_file: &Path) -> ActiveEnvironmentEnv {
             } else {
                 exit(&format!(
                     "Could not parse `{}` file. Error was: {}",
-                    ENV_FILE, err
+                    STATE_ENV_FILE, err
                 ));
             }
         }
@@ -301,7 +311,7 @@ fn remove_env(current_env_file: &Path) -> ActiveEnvironmentEnv {
 
     fs::remove_file(&current_env_file).exit(&format!(
         "Could not remove `{}` file. Environemnt is still active.",
-        ENV_FILE
+        STATE_ENV_FILE
     ));
 
     old_env_vars
@@ -313,8 +323,8 @@ fn create_gitignore_file(activate_dir: &Path) {
     fs::write(
         &activate_dir.join(".gitignore"),
         &format!(
-            "{}/\n{}\n{}\n{}",
-            ACTIVATE_STATE_DIR, ALL_ENV_FILE, ALL_CONFIGMAP_FILE, "README.md"
+            "{}/\n{}/\n{}",
+            ACTIVATE_STATE_DIR, ACTIVATE_ACTIVE_DIR, "README.md"
         ),
     )
     .exit("Could not create `.gitignore` file.");
@@ -325,11 +335,27 @@ fn create_readme(activate_dir: &Path) {
         &activate_dir.join("README.md"),
         format!(
             r#"This directory stores data for the currently active environment.
-Files can freely be added to this directly, but do not change the `{}` directory."#,
-            ACTIVATE_STATE_DIR
+Files can freely be added to this directly, but do not change the `{}` directory.
+The `{}` directory can be modified, but note changes may be overwritten."#,
+            ACTIVATE_STATE_DIR, ACTIVATE_ACTIVE_DIR
         ),
     )
     .exit("Could not create `README.md` file.");
+}
+
+fn ensure_active_files_exist(active_dir: &Path) {
+    if !active_dir.exists() {
+        fs::create_dir_all(&active_dir).exit(&format!(
+            "Could not create `{}` directory.",
+            active_dir.to_string_lossy()
+        ));
+    }
+    for active_file in [ALL_ENV_FILE, ALL_ENV_CONFIGMAP_FILE, ALL_ENV_JSON_FILE] {
+        let full_path = active_dir.join(active_file);
+        if !full_path.exists() {
+            fs::write(&full_path, "").exit(&format!("Could not create `{}` file.", active_file));
+        }
+    }
 }
 
 //************************************************************************//
@@ -339,7 +365,7 @@ fn add_links(links: &HashMap<String, String>, current_links_file: &Path, current
         .create(true)
         .append(true)
         .open(current_links_file)
-        .exit(&format!("Could not open `{}` file.", LINKS_FILE));
+        .exit(&format!("Could not open `{}` file.", STATE_LINKS_FILE));
     for (key, value) in links {
         let source = Path::new(&value);
         if source.starts_with("./") || source.starts_with("../") {
@@ -349,11 +375,7 @@ fn add_links(links: &HashMap<String, String>, current_links_file: &Path, current
         if source.starts_with("./") {
             source = source.strip_prefix("./").unwrap().to_path_buf();
         }
-        if !source.exists()
-            && !source
-                .components()
-                .any(|c| c.as_os_str().to_str().unwrap() == ACTIVATE_DIR)
-        {
+        if !source.exists() {
             exit(&format!(
                 "The source `{}` does not exist.",
                 source.to_string_lossy()
@@ -383,7 +405,7 @@ fn add_links(links: &HashMap<String, String>, current_links_file: &Path, current
             .write_all(&format!("\"{}\"=\"{}\"\n", key, value).as_bytes())
             .exit(&format!(
                 "Could not write to `{}` file. In directory `{}`.",
-                LINKS_FILE,
+                STATE_LINKS_FILE,
                 current_dir.to_string_lossy()
             ));
         let depth_adjustment = PathBuf::from(key)
@@ -423,9 +445,9 @@ fn add_links(links: &HashMap<String, String>, current_links_file: &Path, current
 
 fn remove_links(current_links_file: &Path, current_dir: &Path) {
     let links_string = fs::read_to_string(&current_links_file)
-        .exit(&format!("Could not read `{}` file.", LINKS_FILE));
+        .exit(&format!("Could not read `{}` file.", STATE_LINKS_FILE));
     let links = toml::from_str::<ActiveEnvironmentLinks>(&links_string)
-        .exit(&format!("Could not parse `{}` file.", LINKS_FILE));
+        .exit(&format!("Could not parse `{}` file.", STATE_LINKS_FILE));
     if let Some(links) = links.0 {
         for (key, _value) in links {
             let target = current_dir.join(&key);
@@ -444,7 +466,7 @@ fn remove_links(current_links_file: &Path, current_dir: &Path) {
 
     fs::remove_file(&current_links_file).exit(&format!(
         "Could not remove `{}` file. Links are still active.",
-        LINKS_FILE
+        STATE_LINKS_FILE
     ));
 }
 
