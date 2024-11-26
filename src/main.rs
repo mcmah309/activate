@@ -564,11 +564,11 @@ fn exit(message: &str) -> ! {
     exit_handler(message, std::backtrace::Backtrace::force_capture());
 }
 
-fn exit_handler<E: Debug>(message: &str, error: E) -> ! {
+fn exit_handler<E: Debug>(message: &str, _error: E) -> ! {
     eprintln!("Error: {}", message);
     #[cfg(debug_assertions)]
     {
-        eprintln!("{:?}", error);
+        eprintln!("{:?}", _error);
     }
     std::process::exit(1);
 }
