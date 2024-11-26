@@ -132,14 +132,19 @@ fn main() {
             new_env,
         } = env;
 
+        let active_dir = activate_toml_file_directory
+            .join(ACTIVATE_DIR)
+            .join(ACTIVATE_ACTIVE_DIR);
+
+        let json_env_file_data = serde_json::to_string_pretty(&new_env)
+            .expect("Could not serialize environment variables to json.");
+        fs::write(active_dir.join(ALL_ENV_JSON_FILE), json_env_file_data)
+            .exit(format!("Could not write to `{}` file.", ALL_ENV_JSON_FILE).as_str());
+
         let mut old_env = old_env.into_iter().collect::<Vec<_>>();
         old_env.sort_by(|e1, e2| e1.0.cmp(e2.0));
         let mut new_env = new_env.into_iter().collect::<Vec<_>>();
         new_env.sort_by(|e1, e2| e1.0.cmp(e2.0));
-
-        let active_dir = activate_toml_file_directory
-            .join(ACTIVATE_DIR)
-            .join(ACTIVATE_ACTIVE_DIR);
 
         let env_file_data = new_env.iter().fold(
             r#"# Generated - managed by `activate`.
@@ -153,11 +158,6 @@ fn main() {
         );
         fs::write(active_dir.join(ALL_ENV_FILE), env_file_data)
             .exit(format!("Could not write to `{}` file.", ALL_ENV_FILE).as_str());
-
-        let json_env_file_data = serde_json::to_string_pretty(&new_env)
-            .expect("Could not serialize environment variables to json.");
-        fs::write(active_dir.join(ALL_ENV_JSON_FILE), json_env_file_data)
-            .exit(format!("Could not write to `{}` file.", ALL_ENV_JSON_FILE).as_str());
 
         let configmap_file_data = new_env.iter().fold(
             format!(
