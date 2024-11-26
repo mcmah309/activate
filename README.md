@@ -64,8 +64,8 @@ Then environments can be easily loaded with an even shorter command
 a dev
 ```
 
-A `.env` file and a `configmap` file are also created in the `.activate` directory. That can be used
-as needed.
+An `.env` file and a `configmap` file, representing the active environment,
+are created in the `.activate` directory for convenient use.
 
 ### Monorepo
 `activate.toml` files can be distributed across a codebase, where each application has its own
