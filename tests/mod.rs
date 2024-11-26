@@ -199,6 +199,7 @@ fn descendants() -> Result<(), CargoError> {
 export PYTHONPATH=src
 export TEST_ENV=test
 export TEST_ENV2=test2
+export TEST_ENV3=test3
 "#,
     ));
 
@@ -220,6 +221,36 @@ export TEST_ENV2=test2
     assert_eq!(
         fs::read_to_string(Path::new("another_active_dir/test_file4")).unwrap(),
         "test_file4"
+    );
+
+    assert_eq!(
+        fs::read_to_string(Path::new(".activate/active/.env")).unwrap(),
+        r#"# Generated - managed by `activate`.
+
+DJANGO_SETTINGS_MODULE=settings
+PYTHONPATH=src
+TEST_ENV=test
+TEST_ENV2=test2
+TEST_ENV3=test3
+"#
+    );
+
+    assert_eq!(
+        fs::read_to_string(Path::new("another_active_dir/.activate/active/.env")).unwrap(),
+        r#"# Generated - managed by `activate`.
+
+TEST_ENV=test
+TEST_ENV2=test2
+TEST_ENV3=test3
+"#
+    );
+
+    assert_eq!(
+        fs::read_to_string(Path::new("another_active_dir/another_active_dir/.activate/active/.env")).unwrap(),
+        r#"# Generated - managed by `activate`.
+
+TEST_ENV3=test3
+"#
     );
 
     Ok(())

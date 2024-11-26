@@ -16,6 +16,10 @@ struct ActivateArgs {
     /// Name of the environment to activate. If not provided, any active environment will be deactivated.
     env_name: Option<String>,
 
+    /// The path to the directory containing the `activate.toml` file.
+    #[arg(short, long, default_value = ".")]
+    path: PathBuf,
+
     /// If provided, the command to unset the old env variables and load the new env will not be sent to std out.
     #[arg(short, default_value = "false")]
     silent: bool,
@@ -43,15 +47,21 @@ const STATE_LINKS_FILE: &'static str = "links.toml";
 fn main() {
     let args: ActivateArgs = ActivateArgs::parse();
 
-    let active_dir = Path::new(ACTIVATE_DIR).join(ACTIVATE_ACTIVE_DIR);
-    ensure_active_files_exist(&active_dir);
-
     let ActivateArgs {
         env_name: selected_env,
+        path,
         silent,
         descendants,
         configmap_name,
     } = args;
+
+    let activate_file = path.join(ACTIVATE_TOML);
+    if !activate_file.exists() {
+        exit(&format!(
+            "No `{}` file found in the current directory.",
+            ACTIVATE_TOML
+        ));
+    }
 
     let mut envs = Vec::<NewAndOldEnv>::new();
     if descendants {
@@ -87,48 +97,71 @@ fn main() {
             envs.push(r);
         }
     } else {
-        let activate_file = Path::new(ACTIVATE_TOML);
-        if !activate_file.exists() {
-            exit(&format!(
-                "No `{}` file found in the current directory.",
-                ACTIVATE_TOML
-            ));
-        }
         envs.push(activate(&activate_file, selected_env));
     }
-    let env = envs.into_iter().fold(
-        NewAndOldEnv {
-            old_env: HashMap::new(),
-            new_env: HashMap::new(),
-        },
-        |mut acc, env| {
-            acc.old_env.extend(env.old_env);
-            acc.new_env.extend(env.new_env);
-            acc
-        },
-    );
 
-    let env_file_data = env.new_env.iter().fold(
-        r#"# Generated - managed by `activate`.
+    let envs = create_env_hierarchy(&envs)
+        .into_iter()
+        .map(|(env, sub_envs)| {
+            sub_envs.into_iter().fold(
+                NewAndOldEnv {
+                    activate_toml_file_directory: env.activate_toml_file_directory.clone(),
+                    old_env: env.old_env.clone(),
+                    new_env: env.new_env.clone(),
+                },
+                |mut acc, env| {
+                    for key in env.new_env.keys() {
+                        if acc.new_env.contains_key(key) {
+                            exit(&format!(r#"Could not fully activate environment. Environment variable collision.
+
+`{key}` is defined in `{}` and `{}`"#, acc.activate_toml_file_directory.join(ACTIVATE_TOML).display(), env.activate_toml_file_directory.join(ACTIVATE_TOML).display(),));                        
+                        }
+                    }
+                    acc.old_env.extend(env.old_env.clone());
+                    acc.new_env.extend(env.new_env.clone());
+                    acc
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+
+    for env in envs.iter() {
+        let NewAndOldEnv {
+            activate_toml_file_directory,
+            old_env,
+            new_env,
+        } = env;
+
+        let mut old_env = old_env.into_iter().collect::<Vec<_>>();
+        old_env.sort_by(|e1, e2| e1.0.cmp(e2.0));
+        let mut new_env = new_env.into_iter().collect::<Vec<_>>();
+        new_env.sort_by(|e1, e2| e1.0.cmp(e2.0));
+
+        let active_dir = activate_toml_file_directory
+            .join(ACTIVATE_DIR)
+            .join(ACTIVATE_ACTIVE_DIR);
+
+        let env_file_data = new_env.iter().fold(
+            r#"# Generated - managed by `activate`.
 
 "#
-        .to_string(),
-        |mut s, (k, v)| {
-            s.push_str(&format!("{}={}\n", k, v));
-            s
-        },
-    );
-    fs::write(active_dir.join(ALL_ENV_FILE), env_file_data)
-        .exit(format!("Could not write to `{}` file.", ALL_ENV_FILE).as_str());
+            .to_string(),
+            |mut s, (k, v)| {
+                s.push_str(&format!("{}={}\n", k, v));
+                s
+            },
+        );
+        fs::write(active_dir.join(ALL_ENV_FILE), env_file_data)
+            .exit(format!("Could not write to `{}` file.", ALL_ENV_FILE).as_str());
 
-    let json_env_file_data = serde_json::to_string_pretty(&env.new_env)
-        .expect("Could not serialize environment variables to json.");
-    fs::write(active_dir.join(ALL_ENV_JSON_FILE), json_env_file_data)
-        .exit(format!("Could not write to `{}` file.", ALL_ENV_JSON_FILE).as_str());
+        let json_env_file_data = serde_json::to_string_pretty(&new_env)
+            .expect("Could not serialize environment variables to json.");
+        fs::write(active_dir.join(ALL_ENV_JSON_FILE), json_env_file_data)
+            .exit(format!("Could not write to `{}` file.", ALL_ENV_JSON_FILE).as_str());
 
-    let configmap_file_data = env.new_env.iter().fold(
-        format!(
-            r#"# Generated - managed by `activate`.
+        let configmap_file_data = new_env.iter().fold(
+            format!(
+                r#"# Generated - managed by `activate`.
 
 apiVersion: v1
 kind: ConfigMap
@@ -136,28 +169,34 @@ metadata:
   name: {}
 data:
 "#,
-            configmap_name
-        ),
-        |mut s, (k, v)| {
-            s.push_str(&format!("  {}: \"{}\"\n", k, v));
-            s
-        },
-    );
-    fs::write(active_dir.join(ALL_ENV_CONFIGMAP_FILE), configmap_file_data)
-        .exit(format!("Could not write to `{}` file.", ALL_ENV_CONFIGMAP_FILE).as_str());
+                configmap_name
+            ),
+            |mut s, (k, v)| {
+                s.push_str(&format!("  {}: \"{}\"\n", k, v));
+                s
+            },
+        );
+        fs::write(active_dir.join(ALL_ENV_CONFIGMAP_FILE), configmap_file_data)
+            .exit(format!("Could not write to `{}` file.", ALL_ENV_CONFIGMAP_FILE).as_str());
+    }
 
     // eval output
     if !silent {
+        let this_env = envs
+            .iter()
+            .find(|env| env.activate_toml_file_directory == path)
+            .unwrap();
+
         let mut output = Vec::<String>::new();
-        let mut keys: Vec<&String> = env.old_env.keys().collect();
+        let mut keys: Vec<&String> = this_env.old_env.keys().collect();
         keys.sort();
         for key in keys {
             output.push(format!("unset {}", key));
         }
-        let mut keys: Vec<&String> = env.new_env.keys().collect();
+        let mut keys: Vec<&String> = this_env.new_env.keys().collect();
         keys.sort();
         for key in keys {
-            if let Some(value) = env.new_env.get(key) {
+            if let Some(value) = this_env.new_env.get(key) {
                 output.push(format!("export {}={}", key, value));
             }
         }
@@ -168,7 +207,31 @@ data:
     }
 }
 
+/// Creates a hierarchy of envs
+fn create_env_hierarchy<'a>(
+    envs: &'a [NewAndOldEnv],
+) -> Vec<(&'a NewAndOldEnv, Vec<&'a NewAndOldEnv>)> {
+    let mut hierarchy = Vec::new();
+    for env1 in envs {
+        let mut subs = Vec::new();
+        for env2 in envs {
+            if env1.activate_toml_file_directory == env2.activate_toml_file_directory {
+                continue;
+            }
+            if env2
+                .activate_toml_file_directory
+                .starts_with(&env1.activate_toml_file_directory)
+            {
+                subs.push(env2);
+            }
+        }
+        hierarchy.push((env1, subs));
+    }
+    hierarchy
+}
+
 struct NewAndOldEnv {
+    activate_toml_file_directory: PathBuf,
     old_env: HashMap<String, String>,
     new_env: HashMap<String, String>,
 }
@@ -183,9 +246,11 @@ fn activate(activate_file: &Path, selected_env: Option<String>) -> NewAndOldEnv 
     let current_dir = activate_file.parent().unwrap();
     let activate_dir = current_dir.join(ACTIVATE_DIR);
     let state_dir = activate_dir.join(ACTIVATE_STATE_DIR);
-    // let active_dir = activate_dir.join(ACTIVATE_ACTIVE_DIR);
+    let active_dir = activate_dir.join(ACTIVATE_ACTIVE_DIR);
     let env_file = state_dir.join(STATE_ENV_FILE);
     let links_file = state_dir.join(STATE_LINKS_FILE);
+
+    ensure_active_files_exist(&active_dir);
 
     let new_env: Option<HashMap<String, String>>;
     let old_active_env;
@@ -205,7 +270,7 @@ fn activate(activate_file: &Path, selected_env: Option<String>) -> NewAndOldEnv 
                 state_dir.to_string_lossy()
             ));
             create_gitignore_file(&activate_dir);
-            create_readme(&activate_dir);
+            create_readmes(&activate_dir);
         }
 
         activate_new(&env, &env_file, &links, &links_file, &current_dir);
@@ -220,6 +285,7 @@ fn activate(activate_file: &Path, selected_env: Option<String>) -> NewAndOldEnv 
     }
 
     NewAndOldEnv {
+        activate_toml_file_directory: activate_file.parent().unwrap().to_path_buf(),
         old_env: old_active_env.map(|e| e.0).flatten().unwrap_or_default(),
         new_env: new_env.unwrap_or_default(),
     }
@@ -330,9 +396,10 @@ fn create_gitignore_file(activate_dir: &Path) {
     .exit("Could not create `.gitignore` file.");
 }
 
-fn create_readme(activate_dir: &Path) {
+fn create_readmes(activate_dir: &Path) {
+    let readme = activate_dir.join("README.md");
     fs::write(
-        &activate_dir.join("README.md"),
+        &readme,
         format!(
             r#"This directory stores data for the currently active environment.
 Files can freely be added to this directly, but do not change the `{}` directory.
@@ -340,7 +407,28 @@ The `{}` directory can be modified, but note changes may be overwritten."#,
             ACTIVATE_STATE_DIR, ACTIVATE_ACTIVE_DIR
         ),
     )
-    .exit("Could not create `README.md` file.");
+    .exit(&format!("Could not create `{}` file.", readme.display()));
+    let readme = activate_dir.join(ACTIVATE_STATE_DIR).join("README.md");
+    fs::write(
+        &readme,
+        format!(
+            r#"This directory should not be modified. It stores the links and env variables
+activated in the current environment that are from this `{}` file"#, //todo check to make sure
+            ACTIVATE_TOML
+        ),
+    )
+    .exit(&format!("Could not create `{}` file.", readme.display()));
+    let readme = activate_dir.join(ACTIVATE_ACTIVE_DIR).join("README.md");
+    fs::write(
+        &readme,
+        format!(
+            r#"This directory contains the activated cofig, such env variables, that
+are activated in the current environment and are from this `{}` file or any descendants if 
+activated with the `-d` flags. These files are safe to consumed"#,
+            ACTIVATE_TOML
+        ),
+    )
+    .exit(&format!("Could not create `{}` file.", readme.display()));
 }
 
 fn ensure_active_files_exist(active_dir: &Path) {
