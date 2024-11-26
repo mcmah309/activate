@@ -1,4 +1,3 @@
-
 use std::{collections::HashMap, env, fs, path::Path, sync::Once};
 
 use assert_cmd::cargo::CargoError;
@@ -254,6 +253,33 @@ fn dot_env_file() -> Result<(), CargoError> {
     assert_eq!(env::var("PYTHONPATH").unwrap(), "src");
     assert_eq!(env::var("TEST_ENV").unwrap(), "test");
     assert_eq!(env::var("TEST_ENV2").unwrap(), "test2");
+
+    Ok(())
+}
+
+#[test]
+fn env_file_is_valid_link() -> Result<(), CargoError> {
+    initialize();
+
+    if Path::new(".activate/.env").exists() {
+        fs::remove_file(".activate/.env").unwrap();
+    }
+
+    let assert = assert_cmd::Command::cargo_bin("activate")?
+        .arg("prod")
+        .arg("-s")
+        .assert();
+    assert.success().stdout(predicate::eq(""));
+
+    dotenv::from_path(Path::new(".env")).unwrap();
+
+    assert_eq!(env::var("TEST_VALUE").unwrap(), "value");
+
+    let assert = assert_cmd::Command::cargo_bin("activate")?
+        .arg("-s")
+        .assert();
+    assert.success().stdout(predicate::eq(""));
+    assert!(!Path::new(".env").exists());
 
     Ok(())
 }

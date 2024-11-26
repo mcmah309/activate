@@ -110,8 +110,7 @@ fn main() {
         .exit(format!("Could not write to `{}` file.", ALL_ENV_FILE).as_str());
     let configmap_file_data = env.new_env.iter().fold(
         format!(
-            r#"
-apiVersion: v1
+            r#"apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {}
@@ -326,7 +325,11 @@ fn add_links(links: &HashMap<String, String>, current_links_file: &Path, current
         if source.starts_with("./") {
             source = source.strip_prefix("./").unwrap().to_path_buf();
         }
-        if !source.exists() {
+        if !source.exists()
+            && !source
+                .components()
+                .any(|c| c.as_os_str().to_str().unwrap() == ACTIVATE_DIR)
+        {
             exit(&format!(
                 "The source `{}` does not exist.",
                 source.to_string_lossy()

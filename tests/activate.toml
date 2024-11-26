@@ -15,6 +15,9 @@ XDG_CACHE_HOME = "cache"
 [dev.links]
 "dev_file1" = ".activate/dev/dev_file1"
 
+[prod.env]
+TEST_VALUE = "value"
 
 [prod.links]
 "prod_dir" = ".activate/prod"
+".env" = ".activate/.env"
