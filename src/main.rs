@@ -41,7 +41,7 @@ const ACTIVATE_ACTIVE_DIR: &'static str = "active";
 const STATE_ENV_FILE: &'static str = "env.json";
 const ALL_ENV_FILE: &'static str = ".env";
 const ALL_ENV_JSON_FILE: &'static str = "env.json";
-const ALL_ENV_CONFIGMAP_FILE: &'static str = "configMap";
+const ALL_ENV_CONFIGMAP_FILE: &'static str = "configmap";
 const STATE_LINKS_FILE: &'static str = "links.toml";
 
 fn main() {
