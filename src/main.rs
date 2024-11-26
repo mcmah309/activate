@@ -32,7 +32,7 @@ struct ActivateArgs {
 
 const ACTIVATE_TOML: &'static str = "activate.toml";
 const ACTIVATE_DIR: &'static str = ".activate";
-const ACTIVATE_STATE_DIR: &'static str = "state";
+const ACTIVATE_STATE_DIR: &'static str = ".state";
 const ENV_FILE: &'static str = "env.json";
 const ALL_ENV_FILE: &'static str = ".env";
 const ALL_CONFIGMAP_FILE: &'static str = "configMap";
@@ -102,15 +102,23 @@ fn main() {
             acc
         },
     );
-    let env_file_data = env.new_env.iter().fold(String::new(), |mut s, (k, v)| {
-        s.push_str(&format!("{}={}\n", k, v));
-        s
-    });
+    let env_file_data = env.new_env.iter().fold(
+        r#"# Generated - managed by `activate`.
+
+"#
+        .to_string(),
+        |mut s, (k, v)| {
+            s.push_str(&format!("{}={}\n", k, v));
+            s
+        },
+    );
     fs::write(Path::new(ACTIVATE_DIR).join(ALL_ENV_FILE), env_file_data)
         .exit(format!("Could not write to `{}` file.", ALL_ENV_FILE).as_str());
     let configmap_file_data = env.new_env.iter().fold(
         format!(
-            r#"apiVersion: v1
+            r#"# Generated - managed by `activate`.
+
+apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {}
@@ -187,6 +195,7 @@ fn activate(activate_file: &Path, selected_env: Option<String>) -> NewAndOldEnv 
                 state_dir.to_string_lossy()
             ));
             create_gitignore_file(&activate_dir);
+            create_readme(&activate_dir);
         }
 
         activate_new(&env, &env_file, &links, &links_file, &current_dir);
@@ -303,9 +312,24 @@ fn remove_env(current_env_file: &Path) -> ActiveEnvironmentEnv {
 fn create_gitignore_file(activate_dir: &Path) {
     fs::write(
         &activate_dir.join(".gitignore"),
-        &format!("state/\n{}\n{}", ALL_ENV_FILE, ALL_CONFIGMAP_FILE),
+        &format!(
+            "{}/\n{}\n{}\n{}",
+            ACTIVATE_STATE_DIR, ALL_ENV_FILE, ALL_CONFIGMAP_FILE, "README.md"
+        ),
     )
     .exit("Could not create `.gitignore` file.");
+}
+
+fn create_readme(activate_dir: &Path) {
+    fs::write(
+        &activate_dir.join("README.md"),
+        format!(
+            r#"This directory stores data for the currently active environment.
+Files can freely be added to this directly, but do not change the `{}` directory."#,
+            ACTIVATE_STATE_DIR
+        ),
+    )
+    .exit("Could not create `README.md` file.");
 }
 
 //************************************************************************//

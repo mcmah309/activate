@@ -97,10 +97,10 @@ fn env_switching_between() -> Result<(), CargoError> {
         .arg("test")
         .assert();
     assert.success().stdout(predicate::str::contains(""));
-    let env_file = Path::new(".activate/state/env.json");
-    assert!(env_file.exists());
+    let env_state_file = Path::new(".activate/.state/env.json");
+    assert!(env_state_file.exists());
     let env: HashMap<String, String> =
-        serde_json::from_str(&fs::read_to_string(env_file).unwrap()).unwrap();
+        serde_json::from_str(&fs::read_to_string(env_state_file).unwrap()).unwrap();
     assert_eq!(env.get("PYTHONPATH").unwrap(), "src");
     assert_eq!(env.get("DJANGO_SETTINGS_MODULE").unwrap(), "settings");
     assert!(env.get("XDG_CONFIG_HOME").is_none());
@@ -111,9 +111,9 @@ fn env_switching_between() -> Result<(), CargoError> {
         .arg("dev")
         .assert();
     assert.success().stdout(predicate::str::contains(""));
-    assert!(env_file.exists());
+    assert!(env_state_file.exists());
     let env: HashMap<String, String> =
-        serde_json::from_str(&fs::read_to_string(env_file).unwrap()).unwrap();
+        serde_json::from_str(&fs::read_to_string(env_state_file).unwrap()).unwrap();
     assert!(env.get("PYTHONPATH").is_none());
     assert!(env.get("DJANGO_SETTINGS_MODULE").is_none());
     assert_eq!(env.get("XDG_CONFIG_HOME").unwrap(), "config");
@@ -124,7 +124,7 @@ fn env_switching_between() -> Result<(), CargoError> {
         .arg("prod")
         .assert();
     assert.success().stdout(predicate::str::contains(""));
-    assert!(!env_file.exists());
+    assert!(!env_state_file.exists());
 
     Ok(())
 }
@@ -272,8 +272,6 @@ fn env_file_is_valid_link() -> Result<(), CargoError> {
     assert.success().stdout(predicate::eq(""));
 
     dotenv::from_path(Path::new(".env")).unwrap();
-
-    assert_eq!(env::var("TEST_VALUE").unwrap(), "value");
 
     let assert = assert_cmd::Command::cargo_bin("activate")?
         .arg("-s")

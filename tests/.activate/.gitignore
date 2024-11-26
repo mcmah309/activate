@@ -1,3 +1,4 @@
-state/
+.state/
 .env
 configMap
+README.md
